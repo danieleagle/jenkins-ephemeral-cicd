@@ -1,0 +1,31 @@
+version: '2'
+services:
+  jenkins-master:
+    build: jenkins-master
+    image: danieleagle/jenkins-master:2.32.1-alpine
+    container_name: Jenkins-Master
+    restart: always
+    ports:
+      - "9156:50000"
+    volumes:
+      - "./jenkins-master/volume_data/logs:/var/log/jenkins"
+      - "./jenkins-master/volume_data/home:/var/jenkins_home"
+    depends_on:
+      - jenkins-nginx
+  jenkins-nginx:
+    build: jenkins-nginx
+    image: danieleagle/jenkins-nginx:1.11.8-alpine
+    container_name: Jenkins-NGINX
+    restart: always
+    ports:
+      - "9155:443"
+  jenkins-slave:
+    build: jenkins-slave
+    image: danieleagle/jenkins-slave:1.0-ubuntu-16.04
+    container_name: Jenkins-Slave
+    depends_on:
+      - jenkins-master
+networks:
+  default:
+    external:
+      name: development
