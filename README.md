@@ -32,17 +32,23 @@ Be sure to see the [change log](./CHANGELOG.md) if interested in tracking change
 
 10. [Configure Jenkins to use ephemeral build slaves](./README.md#configuring-jenkins-to-use-ephemeral-build-slaves) with [JNLP](https://docs.oracle.com/javase/tutorial/deployment/deploymentInDepth/jnlp.html).
 
-11. Stop Jenkins by running the following command (geared toward Linux): 
+11. Stop Jenkins by running the following command (geared toward Linux):
 
     `sudo docker stop Jenkins-Master`
 
-    Next, locate `./yad-plugin/yet-another-docker-plugin.jar`. Copy it to `./jenkins-master/volume_data/home/plugins/yet-another-docker-plugin/WEB-INF/lib/` and overwrite the existing file. Now, restart Jenkins by typing the following command:
+    Next, navigate to `./jenkins-master/volume_data/home/plugins/yet-another-docker-plugin/WEB-INF/lib/` and type the following command (geared toward Linux):
+
+    `sudo vim yet-another-docker-plugin.jar`
+
+    Scroll up to the file **com/github/kostyasha/yad/launcher/DockerComputerJNLPLauncher/init.sh** and press enter. Press **:** then **i** to allow for an edit and then scroll to **line 51** and change `if [ "$NO_CERTIFICATE_CHECK" == "true" ]` to `if [ $NO_CERTIFICATE_CHECK = true ]` and then press **:** and then **wq** to write the change and quit. Next, press **:** then **q** to quit.
+
+     Now, start Jenkins by typing the following command:
 
     `sudo docker start Jenkins-Master`
 
     This will fix [a bug](https://github.com/KostyaSha/yet-another-docker-plugin/issues/132) with [version 0.1.0-rc31](https://github.com/KostyaSha/yet-another-docker-plugin/releases/tag/0.1.0-rc31) of the Yet Another Docker plugin.
 
-    **Important:** Upgrading to a newer version of this plugin will likely overwrite this file. It is suggested not to upgrade the plugin until a fix has been officially created. Once this happens, this project will adapt for the fix.
+    **Important:** Upgrading to a newer version of this plugin will overwrite this file. It is suggested not to upgrade the plugin until a fix has been officially created. Once this happens, this project will adapt for the fix. If you prefer to install this version of the plugin manually, it can be found [here](./yad-plugin/yet-another-docker-plugin.hpi).
 
 12. Create a new pipeline job and enter the following for the script.
 
@@ -393,10 +399,6 @@ Using [Yet Another Docker Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Ye
 This is why a different URL is specified for Jenkins Master in the JNLP Launcher Options which is a part of the Yet Another Docker Plugin. Using `https://jenkins-nginx` will ensure wget/curl downloads slave.jar using a URL for Jenkins Master that can be resolved. This is because the internal Docker Naming Service will resolve `jenkins-nginx` to the internal IP for that container by using the default port of 443 which is internally exposed. External connections communicate with this same port using another port via port mapping.
 
 The reason the certificate checks must be ignored via an option in the Yet Another Docker Plugin is because wget/curl will perform a certificate check by default and find that the FQDN `jenkins-nginx` doesn't match the FQDN of the certificate, for example `jenkins.internal.example.com`. In that case, the wget/curl operation will fail. It would be possible to import the certificate into the trusted certificate store for Jenkins Master and not have to ignore certificate checks but this would involve storing secrets inside an image and isn't recommended.
-
-### Getting Around This Problem
-
-It would be possible to get around this problem and prevent ignoring certificate checks. Once the slave agent program runs it will use JNLP to communicate with Jenkins Master which doesn't use HTTPS. Remember, HTTPS is only used to download the slave agent program. Therefore, after this program runs a certificate wouldn't even be necessary. Currently, the Yet Another Docker Plugin will pull this file directly from Jenkins Master then execute it. However, if it allowed for running slave.jar from a different location (e.g. a directory on disk via a Docker volume), it could solve this problem since a HTTPS connection would never be opened and thus no reason to ignore any certificate checks.
 
 ## Further Reading
 

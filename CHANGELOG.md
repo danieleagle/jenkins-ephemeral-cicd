@@ -1,3 +1,9 @@
+# v1.1.1
+
+- Updated main documentation to refine step for resolving a plugin problem.
+- Included Yet Another Docker Plugin version 0.1.0-rc31 install file for manual installation.
+- Removed unneeded altered plugin file.
+
 # v1.1.0
 
 - Bumped Jenkins version to 2.32.3-alpine.
