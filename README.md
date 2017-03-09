@@ -1,12 +1,12 @@
 # Jenkins CICD Docker Pipeline Using Ephemeral Slaves and HTTPS
 
-This repository contains custom Docker files for running [Jenkins](https://jenkins.io/) using ephemeral build slaves over a [NGINX](https://www.nginx.com/) reverse proxy. Everything is setup to run on HTTPS using a self-signed certificate ([this needs to be created](./README.md#generating-a-self-signed-certificate-for-nginx)). This is a great way to setup the ultimate Jenkins [CICD pipeline](https://www.docker.com/use-cases/cicd).
+This repository contains custom Docker files for running [Jenkins](https://jenkins.io/) using ephemeral build slaves over a [NGINX](https://www.nginx.com/) reverse proxy. Everything is setup to run on HTTPS using a self-signed certificate ([this needs to be created](./README.md#generating-a-self-signed-certificate-for-nginx)) or optionally a certificate signed by a trusted CA. This is a great way to setup the ultimate Jenkins [CICD pipeline](https://www.docker.com/use-cases/cicd).
 
 Be sure to see the [change log](./CHANGELOG.md) if interested in tracking changes leading to the current release. In addition, please refer to [this article](http://danieleagle.com/2017/01/jenkins-cicd-docker-pipeline-using-ephemeral-slaves-and-https/) for even more details about this project.
 
 ## Getting Started
 
-1. Ensure [Docker Compose](https://docs.docker.com/compose/) is installed along with [Docker Engine](https://docs.docker.com/engine/installation/).
+1. Ensure [Docker Compose](https://docs.docker.com/compose/) is installed along with [Docker Engine](https://docs.docker.com/engine/installation/). The included **docker-compose.yml** file uses version 3 so it's possible [an upgrade](https://docs.docker.com/compose/install/#upgrading) of Docker Compose may be required.
 
 2. [Secure the Docker Daemon using TLS](./README.md#securing-the-docker-daemon-using-tls).
 
@@ -16,7 +16,7 @@ Be sure to see the [change log](./CHANGELOG.md) if interested in tracking change
 
 5. In the [Docker file](./jenkins-master/Dockerfile) for Jenkins Master, modify the `-Duser.timezone` setting found in the `JAVA_OPTS` environment variable to match the desired time zone. For more information, [see this](https://wiki.jenkins-ci.org/display/JENKINS/Change+time+zone).
 
-6. [Generate a self-signed certificate](./README.md#generating-a-self-signed-certificate-for-nginx) to use with the NGINX reverse proxy.
+6. [Generate a self-signed certificate](./README.md#generating-a-self-signed-certificate-for-nginx) to use with the NGINX reverse proxy. If using a certificate from a trusted CA, still refer to the section on generating a self-signed certificate for instructions on where to place the files.
 
 7. Run the following command (geared toward Linux):
 
@@ -26,20 +26,34 @@ Be sure to see the [change log](./CHANGELOG.md) if interested in tracking change
 
    `sudo make run`
 
-9. [Configure Jenkins to use ephemeral build slaves](./README.md#configuring-jenkins-to-use-ephemeral-build-slaves) with [JNLP](https://docs.oracle.com/javase/tutorial/deployment/deploymentInDepth/jnlp.html).
+9. Change the Jenkins URL to specify the HTTP address of the Jenkins installation which is accessible externally (e.g. **https://jenkins.internal.example.com:9155**). This should match the FQDN of the certificate used to secure Jenkins via HTTPS. While logged into Jenkins, go to **Manage Jenkins** -> **Configure System** and then scroll down to the section labeled **Jenkins Location**. Enter the desired URL into the **Jenkins URL** field.
 
-10. Create a new pipeline job and enter the following for the script.
+   **Note:** If this step is missed, Jenkins will warn you of an invalid reverse proxy configuration.
 
-   ```bash
-   node ('testslave') {
+10. [Configure Jenkins to use ephemeral build slaves](./README.md#configuring-jenkins-to-use-ephemeral-build-slaves) with [JNLP](https://docs.oracle.com/javase/tutorial/deployment/deploymentInDepth/jnlp.html).
 
-   stage 'Stage 1'
-   sh 'echo "Hello from your favorite test slave!"'
+11. Stop Jenkins by running the following command (geared toward Linux): 
 
-   }
-   ```
+    `sudo docker stop Jenkins-Master`
 
-11. Save and run the job and take note of the results. If everything was setup properly, Docker should dynamically provision a Jenkins slave and then remove it when it's no longer needed.
+    Next, locate `./yad-plugin/yet-another-docker-plugin.jar`. Copy it to `./jenkins-master/volume_data/home/plugins/yet-another-docker-plugin/WEB-INF/lib/` and overwrite the existing file. Now, restart Jenkins by typing the following command:
+
+    `sudo docker start Jenkins-Master`
+
+    This will fix [a bug](https://github.com/KostyaSha/yet-another-docker-plugin/issues/132) with [version 0.1.0-rc31](https://github.com/KostyaSha/yet-another-docker-plugin/releases/tag/0.1.0-rc31) of the Yet Another Docker plugin.
+
+    **Important:** Upgrading to a newer version of this plugin will likely overwrite this file. It is suggested not to upgrade the plugin until a fix has been officially created. Once this happens, this project will adapt for the fix.
+
+12. Create a new pipeline job and enter the following for the script.
+
+    ```bash
+    node ('testslave') {
+      stage 'Stage 1'
+      sh 'echo "Hello from your favorite test slave!"'
+    }
+    ```
+
+13. Save and run the job and take note of the results. If everything was setup properly, Docker should dynamically provision a Jenkins slave and then remove it when it's no longer needed.
 
 Please read the rest of the content found within in order to understand additional configuration options.
 
@@ -65,7 +79,7 @@ The following will configure the Docker Daemon using TLS (geared toward Linux). 
 
    The above command will request input in the following areas shown below.
 
-   ``` bash
+    ``` bash
     Country Name (2 letter code) [AU]:
     State or Province Name (full name) [Some-State]:
     Locality Name (eg, city) []:
@@ -184,15 +198,15 @@ The following will configure the Docker Daemon using TLS (geared toward Linux). 
 
 10. Reload and restart Docker by running the following commands.
 
-   `sudo service docker stop`
+    `sudo service docker stop`
 
-   Then enter the next command:
+    Then enter the next command:
 
-   `sudo systemctl daemon-reload`
+    `sudo systemctl daemon-reload`
 
-   Then enter the next command:
+    Then enter the next command:
 
-   `sudo service docker start`
+    `sudo service docker start`
 
 If everything worked correctly, issuing the command `sudo docker ps` should work fine without any errors.
 
@@ -221,15 +235,15 @@ In order to generate a self-signed certificate (using OpenSSL) to secure all HTT
     An optional company name []:
     ```
 
-   It's important that for *Common Name (e.g. server FQDN or YOUR name)* to enter `jenkins-nginx`.
+   It's important that for *Common Name (e.g. server FQDN or YOUR name)* to enter the FQDN used to access Jenkins Master such as `jenkins.internal.example.com`.
 
 4. Run the command `sudo openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt` to create the signed certificate. The certificate will be valid for one year unless the value used for days is different.
 
-5. Copy both server.crt and server.key into `./jenkins-nginx/config/ssl` (part of this repository) and overwrite the dummy files. These files will be copied into the Jenkins NGINX container and used to secure the Jenkins Master instance.
+5. Delete the leftover certificate signing request file: `sudo rm server.csr`.
 
-6. Copy server.crt into `./jenkins-slave/config/ssl` (part of this repository) and overwrite the dummy file. This file will be copied into the Jenkins Slave container and used to allow it to communicate with the Jenkins Master instance.
+6. Create a folder named `./jenkins-nginx/volume_data/ssl` by typing (geared toward Linux) the following command: `sudo mkdir -p /jenkins-nginx/volume_data/ssl`. Be sure to run this command in the root of the folder where you cloned this repository.
 
-7. Delete the leftover certificate signing request file: `sudo rm server.csr`.
+7. Copy both **server.crt** and **server.key** into `./jenkins-nginx/volume_data/ssl`. These files will be used by the Jenkins NGINX container to secure the Jenkins Master instance via HTTPS.
 
 ## Configuring Jenkins to Use Ephemeral Build Slaves
 
@@ -267,25 +281,27 @@ With the Docker Daemon secured using TLS and Jenkins Master running behind a NGI
 
 13. Under the **Max Containers** field, the default is **50**. This is the maximum amount of Jenkins slave containers that will be provisioned at any given time. Change this value to the desired amount or leave it as default.
 
-14. Under the **Images** section, click the **Add Docker Template** button and select **Docker Template**. For the **Docker Image Name**, enter `danieleagle/jenkins-slave:1.0-ubuntu-16.04`.
+14. Under the **Images** section, click the **Add Docker Template** button and select **Docker Template**. For the **Docker Image Name**, enter `danieleagle/jenkins-slave:1.0.1-ubuntu-16.04`.
 
 15. For the **Pull Strategy** field, select **Pull never**. Since the image is local there is no need to pull it, so ensure this setting is set correctly.
 
-16. Under the **Remove Container Settings** section, check **Remove volumes**.
+16. Under the **Remove Container Settings** section, click the **Create Container Settings** button. Scroll down to **Network Mode** and enter `development` into the field.
 
-17. For the **Labels** field, enter `testslave`. **Note:** This will likely be a different name later on when moving past the testing phase of this initial setup. This name should match the node found in the pipeline script.
+17. Under the **Remove Container Settings** section, check **Remove volumes**.
 
-18. Under the **Usage** field, select **Only build jobs with label expressions matching this node**.
+18. For the **Labels** field, enter `testslave`. **Note:** This will likely be a different name later on when moving past the testing phase of this initial setup. This name should match the node found in the pipeline script.
 
-19. Under the **Launch method** field, select **Docker JNLP launcher**.
+19. Under the **Usage** field, select **Only build jobs with label expressions matching this node**.
 
-20. Under the **Linux user** field, enter `jenkins`.
+20. Under the **Launch method** field, select **Docker JNLP launcher**.
 
-21. Under the **Slave JVM options** field, enter `-Xmx8192m -Djava.awt.headless=true -Duser.timezone=America/Chicago`. Be sure the change the timezone to the appropriate value.
+21. Under the **Linux user** field, enter `jenkins`.
 
-22. Under the **Different jenkins master URL** field, enter `https://jenkins-nginx`. Also, if everything was done correctly in creating the self-signed certificate for NGINX to use, then **Ignore certificate check** will not need to be checked. However, if SSL errors present themselves, this may be a good way to get around them but it's not recommended to keep that setting in production.
+22. Under the **Slave JVM options** field, enter `-Xmx8192m -Djava.awt.headless=true -Duser.timezone=America/Chicago`. Be sure the change the timezone to the appropriate value.
 
-23. When done with everything, click the **Save** button at the bottom of the page.
+23. Under the **Different jenkins master URL** field, enter `https://jenkins-nginx`. Now tick the box **Ignore certificate check** ([see this](./README.md#note-about-certificates) for important information).
+
+24. When done with everything, click the **Save** button at the bottom of the page.
 
 ## Jenkins Secure Email with TLS
 
@@ -355,6 +371,32 @@ It is possible to use a different OS for Jenkins slaves. However, it will requir
 ## Jenkins Slave Tools
 
 The included Jenkins slave container doesn't have all the tools needed for a given objective or build task. It will need to be modified to include the appropriate tools. In addition, certain Jenkins plugins may need to be installed in order to achieve a specific task to complement the Jenkins slave.
+
+## Note About Certificates
+
+There are certain situations that will present themselves depending on whether the certificate being used is self-signed or signed by a trusted CA. Below are the various scenarios that can happen. Please make note of them.
+
+* By accessing Jenkins from `https://192.168.1.50:9155` a certificate error will result stating the FQDN in the URL doesn't match that listed on the certificate. This is to be expected since an IP address is being used in the URL.
+
+* By accessing Jenkins from `https://jenkins.internal.example.com:9155` using the proper FQDN specified when creating a self-signed certificate, an error will result stating the certificate was signed using a CA that isn't trusted. This is normal behavior for a self-signed certificate and this error can be suppressed by importing it into the trusted root CA ([shown here for Windows](https://blogs.technet.microsoft.com/sbs/2008/05/08/installing-a-self-signed-certificate-as-a-trusted-root-ca-in-windows-vista/)).
+
+* By accessing Jenkins from `https://jenkins.internal.example.com:9155` using the proper FQDN specified when using a certificate obtained or signed from a trusted CA, no error will be presented. This is ideal for production use in larger deployments.
+
+* By accessing Jenkins from `https://jenkins.internal.example.com:9155` but the certificate (any type, self-signed, etc.) being used has a FQDN specified that doesn't match what's being entered in the address bar of the browser, an error will result stating the certificate's FQDN doesn't match.
+
+Taking note of the last bullet point, a problem occurs which is discussed below.
+
+### Jenkins Slave Must Ignore Certificate Checks
+
+Using [Yet Another Docker Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Yet+Another+Docker+Plugin), when the Jenkins Slave starts it will download the slave agent program (**slave.jar**) and then execute it ([see this article](https://wiki.jenkins-ci.org/display/JENKINS/Distributed+builds#Distributedbuilds-WriteyourownscripttolaunchJenkinsslaves)). However, behind the scenes the plugin uses wget or curl to download slave.jar from Jenkins Master. In order to do this, wget/curl will use the URL specified for Jenkins Master. Since the context wget/curl runs is in a container (Jenkins Slave) away from Jenkins Master, it will not be able to use the external FQDN for Jenkins (this is due to the container being isolated in its own internal Docker network).
+
+This is why a different URL is specified for Jenkins Master in the JNLP Launcher Options which is a part of the Yet Another Docker Plugin. Using `https://jenkins-nginx` will ensure wget/curl downloads slave.jar using a URL for Jenkins Master that can be resolved. This is because the internal Docker Naming Service will resolve `jenkins-nginx` to the internal IP for that container by using the default port of 443 which is internally exposed. External connections communicate with this same port using another port via port mapping.
+
+The reason the certificate checks must be ignored via an option in the Yet Another Docker Plugin is because wget/curl will perform a certificate check by default and find that the FQDN `jenkins-nginx` doesn't match the FQDN of the certificate, for example `jenkins.internal.example.com`. In that case, the wget/curl operation will fail. It would be possible to import the certificate into the trusted certificate store for Jenkins Master and not have to ignore certificate checks but this would involve storing secrets inside an image and isn't recommended.
+
+### Getting Around This Problem
+
+It would be possible to get around this problem and prevent ignoring certificate checks. Once the slave agent program runs it will use JNLP to communicate with Jenkins Master which doesn't use HTTPS. Remember, HTTPS is only used to download the slave agent program. Therefore, after this program runs a certificate wouldn't even be necessary. Currently, the Yet Another Docker Plugin will pull this file directly from Jenkins Master then execute it. However, if it allowed for running slave.jar from a different location (e.g. a directory on disk via a Docker volume), it could solve this problem since a HTTPS connection would never be opened and thus no reason to ignore any certificate checks.
 
 ## Further Reading
 
