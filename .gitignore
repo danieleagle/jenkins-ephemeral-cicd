@@ -36,7 +36,6 @@ $RECYCLE.BIN/
 # .nfs files are created when an open file is removed but is still being accessed
 .nfs*
 
-
 ### macOS ###
 *.DS_Store
 .AppleDouble
@@ -61,8 +60,6 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-# Docker Volume Folder
+# Docker Volume Folders
 jenkins-master/volume_data
-
-# SSL Folder
-jenkins-nginx\config\ssl
+jenkins-nginx/volume_data
