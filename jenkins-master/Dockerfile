@@ -1,4 +1,4 @@
-FROM jenkins:2.32.1-alpine
+FROM jenkins:2.32.3-alpine
 MAINTAINER Daniel Eagle
 
 # Switch to root in order to have right permissions
@@ -11,10 +11,6 @@ RUN mkdir /var/log/jenkins \
   && chown -R ${user}:${user} /var/log/jenkins \
   && chown -R ${user}:${user} /var/cache/jenkins
 
-# Jenkins log directory is a volume, so logs
-# can be persisted and survive image upgrades
-VOLUME /var/log/jenkins
-
 # Set Java and Jenkins Options
 ENV JAVA_OPTS="-Xmx8192m -Djava.awt.headless=true -Dmail.smtp.starttls.enable=true -Duser.timezone=America/Chicago"
 ENV JENKINS_OPTS="--logfile=/var/log/jenkins/jenkins.log  --webroot=/var/cache/jenkins/war"
@@ -22,8 +18,11 @@ ENV JENKINS_OPTS="--logfile=/var/log/jenkins/jenkins.log  --webroot=/var/cache/j
 # Install default plugins
 COPY config/plugins.sh /usr/local/bin/plugins.sh
 COPY config/plugins.txt /tmp/plugins.txt
-
 RUN /usr/local/bin/plugins.sh /tmp/plugins.txt
+
+# Jenkins log directory is a volume, so logs
+# can be persisted and survive image upgrades
+VOLUME /var/log/jenkins
 
 # Switch to the jenkins user
 USER ${user}
