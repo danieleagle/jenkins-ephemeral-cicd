@@ -1,3 +1,9 @@
+# v1.1.2
+
+- Reverted Yet Another Docker Plugin to version 0.1.0-rc30 until a solution to [this problem](https://github.com/KostyaSha/yet-another-docker-plugin/issues/136) has been addressed.
+- Changed plugins.txt to include the latest plugins on installation (except Yet Another Docker Plugin which is set to v0.1.0-rc30).
+- Updated documentation to include information on accessing the Yet Another Docker Plugin release archives.
+
 # v1.1.1
 
 - Updated main documentation to refine step for resolving a plugin problem.

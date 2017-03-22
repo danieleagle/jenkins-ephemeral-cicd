@@ -46,9 +46,9 @@ Be sure to see the [change log](./CHANGELOG.md) if interested in tracking change
 
     `sudo docker start Jenkins-Master`
 
-    This will fix [a bug](https://github.com/KostyaSha/yet-another-docker-plugin/issues/132) with [version 0.1.0-rc31](https://github.com/KostyaSha/yet-another-docker-plugin/releases/tag/0.1.0-rc31) of the Yet Another Docker plugin.
+    This will fix [a bug](https://github.com/KostyaSha/yet-another-docker-plugin/issues/132) with [version 0.1.0-rc30](https://github.com/KostyaSha/yet-another-docker-plugin/releases/tag/0.1.0-rc30) of the Yet Another Docker plugin.
 
-    **Important:** Upgrading to a newer version of this plugin will overwrite this file. It is suggested not to upgrade the plugin until a fix has been officially created. Once this happens, this project will adapt for the fix. If you prefer to install this version of the plugin manually, it can be found [here](./yad-plugin/yet-another-docker-plugin.hpi).
+    **Important:** Upgrading to a newer version of this plugin will overwrite this file. It is suggested not to upgrade the plugin until a fix has been officially created. Once this happens, this project will adapt for the fix. If you prefer to install this version of the plugin manually, it can be found [here](./yad-plugin/yet-another-docker-plugin.hpi). You may also download it from the [YAD Plugin archives](http://updates.jenkins-ci.org/download/plugins/yet-another-docker-plugin/).
 
 12. Create a new pipeline job and enter the following for the script.
 
