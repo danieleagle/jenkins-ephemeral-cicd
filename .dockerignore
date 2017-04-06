@@ -11,3 +11,6 @@ jenkins-nginx/config/logrotate
 
 # Git Folder
 .git
+
+# MD Files
+*.md
