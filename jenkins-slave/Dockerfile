@@ -1,28 +1,39 @@
-FROM ubuntu:16.04
+FROM openjdk:8u121-jdk-alpine
 MAINTAINER Daniel Eagle
 
-# Install the python script required for "add-apt-repository",
-# add the OpenJDK 8 repo, and Install OpenJDK 8 and other applicable packages
-RUN apt-get update && apt-get install -y software-properties-common \
-  && add-apt-repository ppa:openjdk-r/ppa \
-  && apt-get update && apt-get install -y openjdk-8-jdk curl
+# Add and update ca-certificates
+RUN apk update \
+  && apk add --no-cache openssl
 
-# Define env variables
-ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64/
-ENV SHELL=/bin/bash
+# Define env variables and arguments
 ENV JENKINS_HOME=/home/jenkins
 ENV JENKINS_USER=jenkins
+ARG uid=1000
+ARG SHELL=/bin/sh
 
-# Create Jenkins home directory and create Jenkins user
+# Create Jenkins home directory and create Jenkins group and user
 RUN mkdir -p /home/jenkins \
-  && useradd -d $JENKINS_HOME -s $SHELL $JENKINS_USER
+  && addgroup -g ${uid} $JENKINS_USER \
+  && adduser -h $JENKINS_HOME -u ${uid} -G ${JENKINS_USER} -s ${SHELL} -D ${JENKINS_USER}
 
-# Apply permissions
-RUN chown -R $JENKINS_USER $JENKINS_HOME \
-  && chgrp -R $JENKINS_USER $JENKINS_HOME
+# Add the jenkins user to sudoers
+RUN echo "${JENKINS_USER}    ALL=(ALL)    ALL" >> etc/sudoers
 
 # Set name servers
 COPY config/resolv.conf /etc/resolv.conf
+
+# Define new truststore location
+ARG trustStore=/etc/ssl/java/truststore
+
+# Create folder to store new cacerts location
+RUN mkdir -p ${trustStore}
+
+# Apply permissions
+RUN chown -R $JENKINS_USER $JENKINS_HOME ${trustStore} \
+  && chgrp -R $JENKINS_USER $JENKINS_HOME ${trustStore}
+
+# Create volume to persist data
+VOLUME /etc/ssl/java/truststore
 
 # Switch to the jenkins user
 USER ${JENKINS_USER}
