@@ -1,4 +1,4 @@
-FROM jenkins:2.32.3-alpine
+FROM jenkins:2.46.1-alpine
 MAINTAINER Daniel Eagle
 
 # Switch to root in order to have right permissions
