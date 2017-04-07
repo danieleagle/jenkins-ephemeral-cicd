@@ -46,10 +46,6 @@ It is assumed that the environment being used is Linux. The instructions within 
 
 12. [Configure Jenkins to use ephemeral build slaves](./README.md#configuring-jenkins-to-use-ephemeral-build-slaves) with [JNLP](https://docs.oracle.com/javase/tutorial/deployment/deploymentInDepth/jnlp.html).
 
-    **Note:** There is [a bug](https://github.com/KostyaSha/yet-another-docker-plugin/issues/136) with versions of the Yet Another Docker plugin newer than 0.1.0-rc31 that prevents the **Add Docker Template** dropdown from working. Upgrading to a newer version of the plugin beyond 0.1.0-rc31 will cause problems with following these instructions. It is suggested not to upgrade the plugin until a fix has been officially created. Once this happens, this project will adapt for the fix.
-
-    If you prefer to install the latest known working version of the plugin manually (0.1.0-rc31), it can be found [here](./yad-plugin/yet-another-docker-plugin.hpi). You may also download it from the [YAD Plugin archives](http://updates.jenkins-ci.org/download/plugins/yet-another-docker-plugin/0.1.0-rc31/yet-another-docker-plugin.hpi).
-
 13. Create a new pipeline job and enter the following for the script.
 
     ```bash
