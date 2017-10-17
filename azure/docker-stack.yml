@@ -1,0 +1,50 @@
+version: '3'
+services:
+  jenkins-master:
+    image: <container-registry-url>/cicd/jenkins-master:2.85-alpine
+    networks:
+      spacely-eng:
+        aliases:
+          - jenkins-master-docker-only.example.com
+    depends_on:
+      - jenkins-nginx
+    volumes:
+      - /nfs/docker-data/container-data/cicd/jenkins/jenkins-master/logs:/var/log/jenkins
+      - /nfs/docker-data/container-data/cicd/jenkins/jenkins-master/home:/var/jenkins_home
+    deploy:
+      labels:
+        - jenkins-master_service
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints: [node.labels.cicdBuildsOnly != true]
+      update_config:
+        parallelism: 1
+      restart_policy:
+        condition: any
+  jenkins-nginx:
+    image: <container-registry-url>/cicd/jenkins-nginx:1.13.5-alpine
+    networks:
+      spacely-eng:
+        aliases:
+          - jenkins-nginx-docker-only.example.com
+    ports:
+      - 52443:443
+      - 50000:50000
+    volumes:
+      - /nfs/docker-data/container-data/cicd/jenkins/jenkins-nginx/certs:/etc/ssl/certs/nginx:ro
+    deploy:
+      labels:
+        - jenkins-nginx_service
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints: [node.labels.cicdBuildsOnly != true]
+      update_config:
+        parallelism: 1
+      restart_policy:
+        condition: any
+networks:
+  spacely-eng:
+    external:
+      name: spacely-eng-core

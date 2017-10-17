@@ -1,0 +1,38 @@
+version: '3'
+services:
+  jenkins-master:
+    build: jenkins-master
+    image: <container-registry-url>/cicd/jenkins-master:2.85-alpine
+    container_name: Jenkins-Master
+    restart: always
+    depends_on:
+      - jenkins-nginx
+    volumes:
+      - /nfs/docker-data/container-data/cicd/jenkins/jenkins-master/logs:/var/log/jenkins
+      - /nfs/docker-data/container-data/cicd/jenkins/jenkins-master/home:/var/jenkins_home
+    networks:
+      cicd-net:
+        aliases:
+          - jenkins-master.example.com
+  jenkins-nginx:
+    build: jenkins-nginx
+    image: <container-registry-url>/cicd/jenkins-nginx:1.13.5-alpine
+    container_name: Jenkins-NGINX
+    restart: always
+    ports:
+      - 52443:443
+      - 50000:50000
+    volumes:
+      - /nfs/docker-data/container-data/cicd/jenkins/jenkins-nginx/certs:/etc/ssl/certs/nginx:ro
+    networks:
+      cicd-net:
+        aliases:
+          - jenkins-nginx.example.com
+  jenkins-slave:
+    build: jenkins-slave
+    image: <container-registry-url>/cicd/jenkins-slave:8u131-jdk-alpine
+    container_name: Jenkins-Slave
+networks:
+  cicd-net:
+    external:
+      name: spacely-eng-disparate
