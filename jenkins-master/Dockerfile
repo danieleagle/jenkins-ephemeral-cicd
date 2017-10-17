@@ -5,6 +5,9 @@ MAINTAINER Daniel Eagle
 # to get things done
 USER root
 
+# Define argument for jenkins user
+ARG user=jenkins
+
 # Prep Jenkins logging and cache directories
 RUN mkdir /var/log/jenkins \
   && mkdir /var/cache/jenkins \
