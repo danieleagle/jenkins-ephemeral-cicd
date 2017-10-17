@@ -1,4 +1,4 @@
-FROM openjdk:8u121-jdk-alpine
+FROM openjdk:8u131-jdk-alpine
 MAINTAINER Daniel Eagle
 
 # Add and update ca-certificates
