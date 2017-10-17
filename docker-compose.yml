@@ -2,7 +2,7 @@ version: '3'
 services:
   jenkins-master.dev.internal.example.com:
     build: jenkins-master
-    image: danieleagle/jenkins-master:2.46.1-alpine
+    image: danieleagle/jenkins-master:2.85-alpine
     container_name: Jenkins-Master
     restart: always
     ports:
