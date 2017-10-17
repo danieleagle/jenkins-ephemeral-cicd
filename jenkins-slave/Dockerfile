@@ -1,23 +1,24 @@
 FROM openjdk:8u131-jdk-alpine
 MAINTAINER Daniel Eagle
 
-# Add and update ca-certificates
+# Add required packages
 RUN apk update \
-  && apk add --no-cache openssl
+  && apk add --no-cache openssl ca-certificates git shadow docker py-pip \
+  && pip install docker-compose
 
 # Define env variables and arguments
 ENV JENKINS_HOME=/home/jenkins
 ENV JENKINS_USER=jenkins
 ARG uid=1000
-ARG SHELL=/bin/sh
+ARG shell=/bin/sh
 
 # Create Jenkins home directory and create Jenkins group and user
 RUN mkdir -p /home/jenkins \
   && addgroup -g ${uid} $JENKINS_USER \
-  && adduser -h $JENKINS_HOME -u ${uid} -G ${JENKINS_USER} -s ${SHELL} -D ${JENKINS_USER}
+  && adduser -h $JENKINS_HOME -u ${uid} -G ${JENKINS_USER} -s ${shell} -D ${JENKINS_USER}
 
 # Add the jenkins user to sudoers
-RUN echo "${JENKINS_USER}    ALL=(ALL)    ALL" >> etc/sudoers
+RUN echo "${JENKINS_USER}    ALL=(ALL)    ALL" >> /etc/sudoers
 
 # Set name servers
 COPY config/resolv.conf /etc/resolv.conf
