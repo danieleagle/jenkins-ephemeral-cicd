@@ -1,33 +1,38 @@
 version: '3'
 services:
-  jenkins-master.dev.internal.example.com:
+  jenkins-master:
     build: jenkins-master
     image: danieleagle/jenkins-master:2.85-alpine
     container_name: Jenkins-Master
     restart: always
-    ports:
-      - "51206:50000"
+    depends_on:
+      - jenkins-nginx
     volumes:
       - ./jenkins-master/volume_data/logs:/var/log/jenkins
       - ./jenkins-master/volume_data/home:/var/jenkins_home
-    depends_on:
-      - jenkins-nginx.dev.internal.example.com
-  jenkins-nginx.dev.internal.example.com:
+    networks:
+      dev-net:
+        aliases:
+          - jenkins-master.dev.internal.example.com
+  jenkins-nginx:
     build: jenkins-nginx
     image: danieleagle/jenkins-nginx:1.13.5-alpine
     container_name: Jenkins-NGINX
     restart: always
     ports:
-      - "51205:443"
+      - 52443:443
+      - 50000:50000
     volumes:
       - ./jenkins-nginx/volume_data/ssl:/etc/ssl/certs/nginx:ro
-  jenkins-slave.dev.internal.example.com:
+    networks:
+      dev-net:
+        aliases:
+          - jenkins-nginx.dev.internal.example.com
+  jenkins-slave:
     build: jenkins-slave
     image: danieleagle/jenkins-slave:8u131-jdk-alpine
     container_name: Jenkins-Slave
-    depends_on:
-      - jenkins-master.dev.internal.example.com
 networks:
-  default:
+  dev-net:
     external:
       name: development
