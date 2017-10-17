@@ -14,7 +14,7 @@ services:
       - jenkins-nginx.dev.internal.example.com
   jenkins-nginx.dev.internal.example.com:
     build: jenkins-nginx
-    image: danieleagle/jenkins-nginx:1.11.12-alpine
+    image: danieleagle/jenkins-nginx:1.13.5-alpine
     container_name: Jenkins-NGINX
     restart: always
     ports:

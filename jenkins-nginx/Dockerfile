@@ -1,4 +1,4 @@
-FROM nginx:1.11.12-alpine
+FROM nginx:1.13.5-alpine
 MAINTAINER Daniel Eagle
 
 # Remove unnecessary default file
