@@ -7,4 +7,4 @@ stop:
 clean:	stop
 	@docker-compose rm jenkins-master jenkins-nginx
 clean-images:
-	@docker rmi `docker images -q -f "dangling=true"`
+	@docker image prune -f
