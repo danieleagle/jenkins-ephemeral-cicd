@@ -1,3 +1,19 @@
+# v1.3.0
+
+- Updated Jenkins to latest version.
+- Fixed issue where Jenkins Master was running as root.
+- Updated plugin versions and added and removed some of them where applicable.
+- Updated NGINX to latest version.
+- Exposed port 50000 on NGINX image.
+- Set ignore_invalid_headers to off in Jenkins NGINX config to prevent potential reverse proxy errors.
+- Set server_tokens to off in Jenkins NGINX config to prevent showing the version of NGINX.
+- Updated the Jenkins Slave to use the latest base image (openjdk:8u131-jdk-alpine).
+- Updated Jenkins Slave image to contain Git, Docker, and Docker Compose (this is not DIND - just the binaries).
+- Updated docker-compose.yml to use network aliases, updated the port mapping, and changed the service names.
+- Updated makefile to use a newer method for pruning images (docker image prune).
+- Updated the docs to include updated instructions.
+- Added Azure files to complement [this article](https://danieleagle.com/2017/10/setting-up-a-private-cicd-solution-in-azure/).
+
 # v1.2.1
 
 - Changed plugins.txt to include the latest plugins on installation.

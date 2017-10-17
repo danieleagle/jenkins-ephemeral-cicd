@@ -2,17 +2,19 @@
 
 This repository contains custom Docker files for running [Jenkins](https://jenkins.io/) using ephemeral build slaves over a [NGINX](https://www.nginx.com/) reverse proxy. Everything is setup to run on HTTPS using a self-signed certificate ([this needs to be created](./README.md#generating-a-self-signed-certificate-using-a-private-ca-for-nginx)) or optionally a certificate signed by a trusted CA. This is a great way to setup the ultimate Jenkins [CICD pipeline](https://www.docker.com/use-cases/cicd).
 
+Alternatively, if you wish to setup a highly available complete CICD solution running in Azure, see [this article](https://danieleagle.com/2017/10/setting-up-a-private-cicd-solution-in-azure/). It contains a plethora of information that will greatly complement the text within. The Azure specific Jenkins files can be found in the [azure](./azure/) folder within this repository.
+
 ## Latest Changes
 
 Be sure to see the [change log](./CHANGELOG.md) if interested in tracking changes leading to the current release. In addition, please refer to [this article](http://danieleagle.com/2017/01/jenkins-cicd-docker-pipeline-using-ephemeral-slaves-and-https/) for even more details about this project.
 
 ## Assumed Environment
 
-It is assumed that the environment being used is Linux. The instructions within have been tested successfully on [Ubuntu](https://www.ubuntu.com/) 16.10.
+It is assumed that the environment being used is Linux. The instructions within have been tested successfully on [Ubuntu](https://www.ubuntu.com/) 16.10 and 17.04.
 
 ## Getting Started
 
-**Important:** It is imperative to follow these instructions in exact order as not doing so will result in problems and potential wasted time.
+**Important:** It is imperative to follow these instructions in exact order as not doing so will result in potential problems.
 
 1. Ensure [Docker Compose](https://docs.docker.com/compose/) is installed along with [Docker Engine](https://docs.docker.com/engine/installation/). The included **docker-compose.yml** file uses version 3 so it's possible [an upgrade](https://docs.docker.com/compose/install/#upgrading) of Docker Compose may be required.
 
@@ -40,7 +42,7 @@ It is assumed that the environment being used is Linux. The instructions within 
 
     `sudo make run`
 
-11. Change the Jenkins URL to specify the address of the Jenkins installation which is accessible externally (e.g. **https://jenkins.dev.internal.example.com:51205**). This should match the FQDN of the certificate used to secure Jenkins via HTTPS. While logged into Jenkins, go to **Manage Jenkins** -> **Configure System** and then scroll down to the section labeled **Jenkins Location**. Enter the desired URL into the **Jenkins URL** field.
+11. Change the Jenkins URL to specify the address of the Jenkins installation which is accessible externally (e.g. **https://jenkins.dev.internal.example.com:52443**). This should match the FQDN of the certificate used to secure Jenkins via HTTPS. While logged into Jenkins, go to **Manage Jenkins** -> **Configure System** and then scroll down to the section labeled **Jenkins Location**. Enter the desired URL into the **Jenkins URL** field.
 
     **Note:** If this step is missed, Jenkins will warn you of an invalid reverse proxy configuration.
 
@@ -49,7 +51,7 @@ It is assumed that the environment being used is Linux. The instructions within 
 13. Create a new pipeline job and enter the following for the script.
 
     ```bash
-    node ('testslave') {
+    node ('jenkins-slave-container') {
       stage 'Stage 1'
       sh 'echo "Hello from your favorite test slave!"'
     }
@@ -67,9 +69,9 @@ The following will configure the Docker Daemon using TLS. Before proceeding, be 
 
    `cd ~`
 
-   `sudo mkdir docker`
+   `sudo mkdir .docker`
 
-   `cd docker`
+   `cd .docker`
 
 2. Create the CA key by running the following commands.
 
@@ -142,21 +144,17 @@ The following will configure the Docker Daemon using TLS. Before proceeding, be 
 
    `sudo mv ca-key.pem ca-key.bak`
 
-   `sudo mv cert.pem cert.bak`
-
    `sudo mv key.pem key.bak`
 
    Then enter the next commands:
 
    `sudo openssl rsa -in ca-key.bak -text > ca-key.pem`
 
-   `sudo openssl rsa -in cert.bak -text > cert.pem`
-
    `sudo openssl rsa -in key.bak -text > key.pem`
 
    Remove the **.bak** files as they are no longer needed.
 
-   `sudo rm ca-key.bak cert.bak key.bak`
+   `sudo rm ca-key.bak key.bak extfile.cnf`
 
 6. Remove the certificate signing requests as they are no longer necessary.
 
@@ -170,19 +168,7 @@ The following will configure the Docker Daemon using TLS. Before proceeding, be 
 
    `sudo chmod -v 0444 ca.pem server-cert.pem cert.pem`
 
-8. Copy the keys into the appropriate folder so Docker can use them.
-
-   `sudo mkdir /etc/docker`
-
-   Then enter the next command:
-
-   `sudo cp ca.pem /etc/docker/.`
-
-   Then enter the next command:
-
-   `sudo cp server*.pem /etc/docker/.`
-
-9. Create and configure the **docker.conf** file by running the following commands.
+8. Create and configure the **docker.conf** file by running the following commands.
 
    `sudo mkdir /etc/systemd/system/docker.service.d`
 
@@ -195,10 +181,35 @@ The following will configure the Docker Daemon using TLS. Before proceeding, be 
    ```bash
    [Service]
    ExecStart=
-   ExecStart=/usr/bin/docker daemon -H unix:///var/run/docker.sock -D --tls=true --tlsverify --tlscacert=/etc/docker/ca.pem --tlscert=/etc/docker/server-cert.pem --tlskey=/etc/docker/server-key.pem -H tcp://0.0.0.0:2376
+   ExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2376
    ```
 
-10. Reload and restart Docker by running the following commands.
+9. Create and configure the **daemon.conf** file by running the following commands.
+
+   `sudo vim /etc/docker/daemon.json`
+
+   Next copy and paste the following into the file.
+
+   ```bash
+   {
+    "tls": true,
+    "tlsverify": true,
+    "tlscacert": "/home/spacely-eng-admin/.docker/ca.pem",
+    "tlscert": "/home/spacely-eng-admin/.docker/server-cert.pem",
+    "tlskey": "/home/spacely-eng-admin/.docker/server-key.pem",
+    "dns": ["8.8.8.8", "8.8.4.4"]
+   }
+   ```
+
+   Replace **spacely-eng-admin** with the appropriate user account. Also, replace the DNS IP address entries with the ones of your choice.
+
+10. Modify **docker.service** and remove uncessary items by running the following command.
+
+    `sudo vim /lib/systemd/system/docker.service`
+
+    Scroll down and find the line **ExecStart=/usr/bin/dockerd -H fd://**. Remove **-H fd://** from the line and save.
+
+11. Reload and restart Docker by running the following commands.
 
     `sudo service docker stop`
 
@@ -244,21 +255,21 @@ Following these instructions will create a private Certificate Authority with a 
 
    The additional DNS entries can each be a wildcard but keep in mind the asterisk will only apply to sub-domains at its current level. This is why **DNS.2** and **DNS.3** are formatted the way they are. For example, in the **DNS.2** entry, the certificate will be valid for **murmur.internal.example.com** or **gitlab.internal.example.com** but not **silly.dev.internal.example.com** (in that case DNS.3 takes care of matching the sub-domain that **silly** is defined at).
 
-   Finally, change the **IP.1** entry to match the IP address of the host running Docker. This will allow you to go to **https://192.168.1.50:51205** without any warnings, assuming the certificate is trusted.
+   Finally, change the **IP.1** entry to match the IP address of the host running Docker. This will allow you to go to **https://192.168.1.50:52443** without any warnings, assuming the certificate is trusted.
 
    **Note:** Setting up a private DNS server may help with certain use cases. Please see [this repository](https://github.com/GetchaDEAGLE/bind-private-dns-docker) for help with that if applicable.
 
-3. Based on the results from the previous step, modify [docker-compose.yml](./docker-compose.yml) to ensure each service name matches the domain naming scheme being used. For example, the name of each service by default is **jenkins-master.dev.internal.example.com**, **jenkins-nginx.dev.internal.example.com**, and **jenkins-slave.dev.internal.example.com**. The reason the service names use this format is it allows the applicable containers to securely communicate using HTTPS using a certificate that matches these names (in this case, the **DNS.3** entry will match these).
+3. Based on the results from the previous step, modify [docker-compose.yml](./docker-compose.yml) to ensure each network alias for each service matches the domain naming scheme being used. For example, the name of each service network alias by default is **jenkins-master.dev.internal.example.com** and **jenkins-nginx.dev.internal.example.com**. The reason the service network aliases use this format is it allows the applicable containers to securely communicate using HTTPS using a certificate that matches these names (in this case, the **DNS.3** entry will match these).
 
-   Each service name works with the Docker Internal Name Resolution Service. In other words, inside the Docker internal network the containers run in, making a call to **jenkins-nginx.dev.internal.example.com** (this won't work externally) will resolve to the internal IP address that the Jenkins NGINX container uses. In order to prevent ignoring certificate validations, each service name must match any of the DNS entries defined in **server.cnf**.
+   Each service network alias works with the Docker Internal Name Resolution Service. In other words, inside the Docker internal network the containers run in, making a call to **jenkins-nginx.dev.internal.example.com** (this won't work externally) will resolve to the internal IP address that the Jenkins NGINX container uses. In order to prevent ignoring certificate validations, each service network alias must match any of the DNS entries defined in **server.cnf**.
 
-4. Edit [jenkins.conf](./jenkins-nginx/config/jenkins.conf) and change line 21 to properly match the service name defined in **docker-compose.yml** for Jenkins Master.
+4. Edit [jenkins.conf](./jenkins-nginx/config/jenkins.conf) and change line 21 to properly match the service network alias defined in **docker-compose.yml** for Jenkins Master.
 
    Default Line 21 Entry: `proxy_pass         http://jenkins-master.dev.internal.example.com:8080;`
 
    Only change the FQDN and keep **http://** and **:8080;** intact.
 
-5. Edit [nginx.conf](./jenkins-nginx/config/nginx.conf) and change line 20 to properly match the service name defined in **docker-compose.yml** for Jenkins Master.
+5. Edit [nginx.conf](./jenkins-nginx/config/nginx.conf) and change line 20 to properly match the service network alias defined in **docker-compose.yml** for Jenkins Master.
 
    Default Line 20 Entry: `server jenkins-master.dev.internal.example.com:50000;`
 
@@ -291,7 +302,7 @@ Following these instructions will create a private Certificate Authority with a 
 
    `sudo openssl req -subj "/CN=jenkins.dev.internal.example.com/O=server/" -sha256 -new -key /path_to_ca_files/keys/server-key.pem -out server.csr`
 
-   Be sure the change **jenkins.dev.internal.example.com** to match the FQDN used to access Jenkins externally (this is different than the internal service names defined in docker-compose.yml) as discussed in the previous steps (e.g. DNS.1 entry in server.cnf).
+   Be sure the change **jenkins.dev.internal.example.com** to match the FQDN used to access Jenkins externally (this is different than the internal service network aliases defined in docker-compose.yml) as discussed in the previous steps (e.g. DNS.1 entry in server.cnf).
 
 8. Sign the public key with the CA and create the server certificate by running the following command:
 
@@ -370,15 +381,15 @@ With the Docker Daemon secured using TLS and Jenkins Master running behind a NGI
 
 **Important:** Be sure to keep track of the absolute path used to clone this repository. It will be referred to as `path_to_repo_files`. Be sure to replace this with the proper paths.
 
-1. While in Jenkins (e.g. https://jenkins.dev.internal.example.com:51205), on the left sidebar go to **Credentials** and then on the sidebar below Credentials, click **System**.
+1. While in Jenkins (e.g. https://jenkins.dev.internal.example.com:52443), on the left sidebar go to **Credentials** and then on the sidebar below Credentials, click **System**.
 
 2. Click on **Global credentials (unrestricted)** and then click **Add Credentials** in the left sidebar.
 
 3. For **Kind**, select **Docker Host Certificate Authentication** and for the **Scope**, choose **Global (Jenkins, nodes, items, all child items, etc)**.
 
-4. Locate the client key used to secure the Docker Daemon. If it wasn't deleted, it should still be in **/home/user/docker**. Check by issuing the following commands.
+4. Locate the client key used to secure the Docker Daemon. If it wasn't deleted, it should still be in **/home/user/.docker**. Check by issuing the following commands.
 
-   `cd ~/docker`
+   `cd ~/.docker`
 
    `ls`
 
@@ -386,9 +397,9 @@ With the Docker Daemon secured using TLS and Jenkins Master running behind a NGI
 
 5. Copy the contents of **key.pem** and paste into the **Client Key** field in Jenkins.
 
-6. Locate the client certificate used to secure the Docker Daemon. It should be in **/etc/docker/**. Copy the contents of **cert.pem** and paste into the **Client Certificate** field in Jenkins.
+6. Locate the client certificate used to secure the Docker Daemon. It should be in **/home/user/.docker**. Copy the contents of **cert.pem** and paste into the **Client Certificate** field in Jenkins.
 
-7. Locate CA certificate used to secure the Docker Daemon. It should be in **/etc/docker/**. Copy the contents of **ca.pem** and paste into the **Server CA Certificate** field in Jenkins.
+7. Locate CA certificate used to secure the Docker Daemon. It should be in **/home/user/.docker**. Copy the contents of **ca.pem** and paste into the **Server CA Certificate** field in Jenkins.
 
 8. Click **OK** when finished.
 
@@ -402,7 +413,7 @@ With the Docker Daemon secured using TLS and Jenkins Master running behind a NGI
 
 13. Under the **Max Containers** field, the default is **50**. This is the maximum amount of Jenkins slave containers that will be provisioned at any given time. Change this value to the desired amount or leave it as default.
 
-14. Under the **Images** section, click the **Add Docker Template** button and select **Docker Template**. For the **Docker Image Name**, enter `danieleagle/jenkins-slave:8u121-jdk-alpine`.
+14. Under the **Images** section, click the **Add Docker Template** button and select **Docker Template**. For the **Docker Image Name**, enter `danieleagle/jenkins-slave:8u131-jdk-alpine`.
 
 15. Under the **Pull Image Settings** section, locate the **Pull Strategy** field and select **Pull never**. Since the image is local there is no need to pull it, so ensure this setting is set correctly.
 
@@ -414,9 +425,9 @@ With the Docker Daemon secured using TLS and Jenkins Master running behind a NGI
 
 18. Under the **Remove Container Settings** section, check **Remove volumes**.
 
-19. For the **Labels** field, enter `testslave`.
+19. For the **Labels** field, enter `jenkins-slave-container`.
 
-    **Note:** This will likely be a different name later on when moving past the testing phase of this initial setup. This name should match the node found in the pipeline script.
+    **Note:** This name should match the node found in the pipeline script.
 
 20. Under the **Usage** field, select **Only build jobs with label expressions matching this node**.
 
@@ -424,13 +435,15 @@ With the Docker Daemon secured using TLS and Jenkins Master running behind a NGI
 
 22. Under the **Linux user** field, enter `jenkins`.
 
-23. Under the **Slave JVM options** field, enter `-Xmx8192m -Djava.awt.headless=true -Duser.timezone=America/Chicago -Djavax.net.ssl.trustStore=/etc/ssl/java/truststore/cacerts`. Be sure the change the timezone to the appropriate value.
+23. Under the **Slave (slave.jar) options** field, enter `-workDir /home/jenkins`.
+
+24. Under the **Slave JVM options** field, enter `-Xmx8192m -Djava.awt.headless=true -Duser.timezone=America/Chicago -Djavax.net.ssl.trustStore=/etc/ssl/java/truststore/cacerts`. Be sure the change the timezone to the appropriate value.
 
     **Note:** If using a certificate generated from a trusted CA (non-private), the string **-Djavax.net.ssl.trustStore=/etc/ssl/java/truststore/cacerts** can be omitted. If you paid for a certificate from a trusted company, that certificate is likely already trusted by the default trust store. In that case, referring to a different trust store is likely unnecessary.
 
-24. Under the **Different jenkins master URL** field, enter `https://jenkins-nginx.dev.internal.example.com`. Be sure to change the format of this URL based on the applicable domain being used (defined as the Jenkins NGINX service name in **docker-compose.yml**). This was discussed earlier when [creating a self-signed certificate](./README.md#generating-a-self-signed-certificate-using-a-private-ca-for-nginx) using a private CA.
+25. Under the **Different jenkins master URL** field, enter `https://jenkins-nginx.dev.internal.example.com`. Be sure to change the format of this URL based on the applicable domain being used (defined as the Jenkins NGINX service network alias in **docker-compose.yml**). This was discussed earlier when [creating a self-signed certificate](./README.md#generating-a-self-signed-certificate-using-a-private-ca-for-nginx) using a private CA.
 
-25. When done with everything, click the **Save** button at the bottom of the page.
+26. When done with everything, click the **Save** button at the bottom of the page.
 
 ## Jenkins Secure Email with TLS
 
@@ -461,7 +474,7 @@ If no network has been created, run the following Docker command: `sudo docker n
 
 ## Port Mapping
 
-The external ports used to map to the internal ports that Jenkins uses are 51205 (maps to 443 for HTTPS) and 51206 (maps to 50000 for JNLP). These ports can certainly be changed but please be mindful of the effects. Additional configuration may be required as a result.
+The external ports used to map to the internal ports that Jenkins uses are 52443 (maps to 443 for HTTPS) and 50000 (maps to 50000 for JNLP). These ports can certainly be changed but please be mindful of the effects. Additional configuration may be required as a result.
 
 ## Data Volumes
 
@@ -469,7 +482,7 @@ It is possible to change the data volume folders mapped to the Jenkins Master co
 
 ## Notes About the Included Make File
 
-Instead of accessing Docker Compose directly, a [makefile](./makefile) is included and should be used instead. The reason for this is that the Jenkins slave shouldn't be running right away; it should only run when it's required. All that will be handled dynamically by the [Yet Another Docker Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Yet+Another+Docker+Plugin) which is included with the Jenkins Master container. Thus, using the **makefile** will prevent the Jenkins slave from running right away.
+Instead of accessing Docker Compose directly, a [makefile](./makefile) is included and should be used instead. The reason for this is that the Jenkins slave shouldn't be running right away; it should only run when it's required. All that will be handled dynamically by the [Yet Another Docker Plugin](https://wiki.jenkins-ci.org/display/JENKINS/Yet+Another+Docker+Plugin) which is included with the Jenkins Master container. Thus, using the **makefile** will prevent the Jenkins Slave from running right away.
 
 ## Logging
 
@@ -511,11 +524,11 @@ It is possible to use a different OS for Jenkins slaves. However, it will requir
 
 ## Jenkins Slave Tools
 
-The included Jenkins slave container doesn't have all the tools needed for every given objective or build task. It will need to be modified to include the appropriate tools. In addition, certain Jenkins plugins may need to be installed in order to achieve a specific task to complement the Jenkins slave.
+The included Jenkins slave container doesn't have all the tools needed for every given objective or build task. It will need to be modified to include the appropriate tools. In addition, certain Jenkins plugins may need to be installed in order to achieve a specific task to complement the Jenkins Slave.
 
 ## Using This Solution with Docker Swarm
 
-It is possible to adapt this solution for use with [Docker Swarm](https://docs.docker.com/engine/swarm/). Take a look at [this article](http://blog.terranillius.com/post/composev3_swarm/) for details.
+It is possible to adapt this solution for use with [Docker Swarm](https://docs.docker.com/engine/swarm/). Take a look at [this article](https://danieleagle.com/2017/10/setting-up-a-private-cicd-solution-in-azure/) for details.
 
 ## Further Reading
 
