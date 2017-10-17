@@ -14,3 +14,6 @@ RUN chmod -v 0444 /etc/nginx/conf.d/jenkins.conf \
 
 # Create volume to persist SSL data
 VOLUME /etc/ssl/certs/nginx
+
+# Open port for JNLP traffic forwarding
+EXPOSE 50000
