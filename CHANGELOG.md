@@ -1,3 +1,10 @@
+# v1.3.1
+
+- Added Jenkinsfile to Azure assets.
+- Added Spring Boot Demo to Azure assets.
+- Minor change to documentation.
+- Added .editorconfig file to keep IDE settings consistent.
+
 # v1.3.0
 
 - Updated Jenkins to latest version.

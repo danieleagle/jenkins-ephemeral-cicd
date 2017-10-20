@@ -51,7 +51,7 @@ It is assumed that the environment being used is Linux. The instructions within 
 13. Create a new pipeline job and enter the following for the script.
 
     ```bash
-    node ('jenkins-slave-container') {
+    node ('jenkins-slave-node') {
       stage 'Stage 1'
       sh 'echo "Hello from your favorite test slave!"'
     }
@@ -425,7 +425,7 @@ With the Docker Daemon secured using TLS and Jenkins Master running behind a NGI
 
 18. Under the **Remove Container Settings** section, check **Remove volumes**.
 
-19. For the **Labels** field, enter `jenkins-slave-container`.
+19. For the **Labels** field, enter `jenkins-slave-node`.
 
     **Note:** This name should match the node found in the pipeline script.
 
