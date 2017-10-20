@@ -1,0 +1,13 @@
+version: '3'
+services:
+  spring-boot-demo:
+    build: .
+    image: <container-registry-url>/cicd-demos/spring-boot:latest
+    container_name: Spring-Boot-Demo
+    restart: always
+    ports:
+      - '8090:8090'
+networks:
+  default:
+    external:
+      name: spacely-eng-disparate
