@@ -30,7 +30,7 @@ services:
           - jenkins-nginx.example.com
   jenkins-slave:
     build: jenkins-slave
-    image: <container-registry-url>/cicd/jenkins-slave:8u131-jdk-alpine
+    image: <container-registry-url>/cicd/jenkins-slave:8u151-jre-alpine
     container_name: Jenkins-Slave
 networks:
   cicd-net:

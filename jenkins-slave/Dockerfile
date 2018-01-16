@@ -1,4 +1,4 @@
-FROM openjdk:8u131-jdk-alpine
+FROM openjdk:8u151-jre-alpine
 LABEL maintainer="Daniel Eagle"
 
 # Add required packages

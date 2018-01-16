@@ -30,7 +30,7 @@ services:
           - jenkins-nginx.dev.internal.example.com
   jenkins-slave:
     build: jenkins-slave
-    image: danieleagle/jenkins-slave:8u131-jdk-alpine
+    image: danieleagle/jenkins-slave:8u151-jre-alpine
     container_name: Jenkins-Slave
 networks:
   dev-net:

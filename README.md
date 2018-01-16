@@ -359,7 +359,7 @@ Following these instructions will create a private Certificate Authority with a 
 
    `sudo su`
 
-   `docker run --rm --entrypoint cat danieleagle/jenkins-slave:8u121-jdk-alpine /usr/lib/jvm/java-1.8-openjdk/jre/lib/security/cacerts > /path_to_repo_files/jenkins-slave/volume_data/ssl/cacerts`
+   `docker run --rm --entrypoint cat danieleagle/jenkins-slave:8u151-jre-alpine /usr/lib/jvm/java-1.8-openjdk/jre/lib/security/cacerts > /path_to_repo_files/jenkins-slave/volume_data/ssl/cacerts`
 
    `exit`
 
@@ -413,7 +413,7 @@ With the Docker Daemon secured using TLS and Jenkins Master running behind a NGI
 
 13. Under the **Max Containers** field, the default is **50**. This is the maximum amount of Jenkins slave containers that will be provisioned at any given time. Change this value to the desired amount or leave it as default.
 
-14. Under the **Images** section, click the **Add Docker Template** button and select **Docker Template**. For the **Docker Image Name**, enter `danieleagle/jenkins-slave:8u131-jdk-alpine`.
+14. Under the **Images** section, click the **Add Docker Template** button and select **Docker Template**. For the **Docker Image Name**, enter `danieleagle/jenkins-slave:8u151-jre-alpine`.
 
 15. Under the **Pull Image Settings** section, locate the **Pull Strategy** field and select **Pull never**. Since the image is local there is no need to pull it, so ensure this setting is set correctly.
 
