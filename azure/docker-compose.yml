@@ -16,7 +16,7 @@ services:
           - jenkins-master.example.com
   jenkins-nginx:
     build: jenkins-nginx
-    image: <container-registry-url>/cicd/jenkins-nginx:1.13.5-alpine
+    image: <container-registry-url>/cicd/jenkins-nginx:1.13.8-alpine
     container_name: Jenkins-NGINX
     restart: always
     ports:

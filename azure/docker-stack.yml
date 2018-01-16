@@ -23,7 +23,7 @@ services:
       restart_policy:
         condition: any
   jenkins-nginx:
-    image: <container-registry-url>/cicd/jenkins-nginx:1.13.5-alpine
+    image: <container-registry-url>/cicd/jenkins-nginx:1.13.8-alpine
     networks:
       spacely-eng:
         aliases:
