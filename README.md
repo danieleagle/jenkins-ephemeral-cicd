@@ -509,9 +509,9 @@ If Fluentd has been setup and you wish to use it, **docker-compose.yml** will ne
 ```bash
 logging:
   driver: fluentd
-    options:
-      fluentd-address: localhost:24224
-      tag: "{{.ImageName}}/{{.Name}}/{{.ID}}"
+  options:
+    fluentd-address: localhost:24224
+    tag: "{{.ImageName}}/{{.Name}}/{{.ID}}"
 ```
 
 ## Jenkins Plugins
