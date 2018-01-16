@@ -2,7 +2,7 @@ version: '3'
 services:
   jenkins-master:
     build: jenkins-master
-    image: danieleagle/jenkins-master:2.85-alpine
+    image: danieleagle/jenkins-master:2.101-alpine
     container_name: Jenkins-Master
     restart: always
     depends_on:

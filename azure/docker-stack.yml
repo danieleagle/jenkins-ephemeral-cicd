@@ -1,7 +1,7 @@
 version: '3'
 services:
   jenkins-master:
-    image: <container-registry-url>/cicd/jenkins-master:2.85-alpine
+    image: <container-registry-url>/cicd/jenkins-master:2.101-alpine
     networks:
       spacely-eng:
         aliases:

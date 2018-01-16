@@ -1,4 +1,4 @@
-FROM jenkins/jenkins:2.85-alpine
+FROM jenkins/jenkins:2.101-alpine
 LABEL maintainer="Daniel Eagle"
 
 # Switch to root in order to have right permissions
