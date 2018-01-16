@@ -1,5 +1,5 @@
 FROM jenkins/jenkins:2.85-alpine
-MAINTAINER Daniel Eagle
+LABEL maintainer="Daniel Eagle"
 
 # Switch to root in order to have right permissions
 # to get things done

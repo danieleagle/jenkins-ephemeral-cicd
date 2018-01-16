@@ -1,5 +1,5 @@
 FROM maven:3.5-jdk-8-alpine
-MAINTAINER Daniel Eagle
+LABEL maintainer="Daniel Eagle"
 
 # Begin -> Define environment variables and arguments
 ENV SPRING_BOOT_USER=springboot

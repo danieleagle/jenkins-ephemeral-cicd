@@ -1,5 +1,5 @@
 FROM nginx:1.13.5-alpine
-MAINTAINER Daniel Eagle
+LABEL maintainer="Daniel Eagle"
 
 # Remove unnecessary default file
 RUN rm /etc/nginx/conf.d/default.conf

@@ -1,5 +1,5 @@
 FROM openjdk:8u131-jdk-alpine
-MAINTAINER Daniel Eagle
+LABEL maintainer="Daniel Eagle"
 
 # Add required packages
 RUN apk update \
