@@ -3,12 +3,14 @@ services:
   spring-boot-demo:
     build:
       context: .
-      dockerfile: Dockerfile.deployment
-    image: <container-registry-url>/cicd-demos/spring-boot:latest
+      dockerfile: Dockerfile.cicd
+    image: cicd-images/spring-boot-demo:latest
     container_name: Spring-Boot-Demo
     restart: always
     ports:
       - '8090:8090'
+    volumes:
+      - /nfs/docker-data/container-data/cicd/nexus/nexus/settings/maven/settings.xml:/var/maven/.m2/settings.xml
 networks:
   default:
     external:

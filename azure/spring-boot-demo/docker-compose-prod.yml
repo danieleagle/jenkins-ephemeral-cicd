@@ -1,7 +1,9 @@
 version: '3'
 services:
   spring-boot-demo:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.deployment
     image: <container-registry-url>/cicd-demos/spring-boot:release
     container_name: Spring-Boot-Demo
     restart: always
