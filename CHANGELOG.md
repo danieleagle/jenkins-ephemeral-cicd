@@ -1,3 +1,7 @@
+# v1.3.3
+
+- Added the missing Maven repository information to the Spring Boot demo pom.xml file.
+
 # v1.3.2
 
 - Removed deprecated maintainer syntax and replaced it with label.
