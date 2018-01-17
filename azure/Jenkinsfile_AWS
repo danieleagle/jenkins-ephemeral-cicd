@@ -1,0 +1,496 @@
+#!groovy
+
+// <Important Note>
+// --------------------------------------------------------------------------------------------------------------------------
+// In order to use this file, the following script approval signatures will be required:
+//   - field java.lang.String value
+//   - new java.lang.Exception java.lang.String
+// After running the job, in Jenkins go to Manage Jenkins -> In-Process Script Approval.
+// Then approve these pending script approvals. This is due to the security system Jenkins
+// is using. There are alternatives to this but the above is the most secure.
+// --------------------------------------------------------------------------------------------------------------------------
+// </Important Note>
+
+// <Global Variables>
+// --------------------------------------------------------------------------------------------------------------------------
+nodeMap = [                                                     // Map of server names and their IP addresses. These servers
+  "spacely-engineering-vm-004": "10.0.0.7",                     // are dedicated to running ephemeral Jenkins Slave
+  "spacely-engineering-vm-005": "10.0.0.8"                      // containers to get work done.
+]
+chosenNode = ""                                                 // Variable which will later store the chosen server to
+                                                                // perform the job. Leave this variable empty.
+// --------------------------------------------------------------------------------------------------------------------------
+// </Global Variables>
+
+// <Environment Variables>
+// --------------------------------------------------------------------------------------------------------------------------
+// Assign values to each of these environment variables to define your environment. The rest of the file will use these
+// variables to get things done.
+// --------------------------------------------------------------------------------------------------------------------------
+
+// Docker Compose file used only by CICD for builds, tests, artifact deployments, etc. but not image deployments. All the
+// relevant details on the image will be here.
+env.DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION = "docker-compose-cicd.yml"
+
+// Name of service defined in Docker Compose files (e.g. spring-boot-demo). Ensure this is very explicit and unique. It is also
+// used by Amazon ECS as a project name.
+env.DOCKER_SERVICE_NAME = "spring-boot-service-a"
+
+// <----------------------- <Dev> ------------------------>
+
+// Docker Compose file used for development deployments. All the relevant details on the image will be here. If using this with
+// AWS ECS, be sure to change the Docker Compose version specifier to 2 instead of 3.
+env.DOCKER_COMPOSE_DEV_FILE_NAME_AND_LOCATION = "docker-compose-dev.yml"
+
+// Number of development Docker containers that should be running for this service on the Amazon ECS cluster.
+// Be sure there is at least the same amount of VMs available in the cluster or deployment failures will occur.
+env.AWS_ECS_DEV_INSTANCE_COUNT = 2
+
+// The minimum percentage of containers that must remain running when updating a development Amazon ECS service. Default is 50.
+// This value is ignored if the desired instance count is 1 (see below).
+// See http://docs.aws.amazon.com/AmazonECS/latest/developerguide/service_definition_parameters.html#minimumHealthyPercent for
+// more details.
+env.AWS_ECS_DEV_DEPLOYMENT_MIN_HEALTHY_PERCENT = 50
+
+// The maximum percentage of containers that must remain running when updating a development Amazon ECS service. Default is 200.
+// See http://docs.aws.amazon.com/AmazonECS/latest/developerguide/service_definition_parameters.html#maximumPercent for
+// more details.
+env.AWS_ECS_DEV_DEPLOYMENT_MAX_PERCENT = 200
+
+// The AWS log group name used for development deployments. Be sure this matches the awslogs-group option for the awslogs driver
+// in the associated Docker Compose file. See http://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_awslogs.html#create_awslogs_loggroups
+// for more details.
+env.AWS_ECS_DEV_LOG_GROUP_NAME = "${env.DOCKER_SERVICE_NAME}-dev"
+
+// The AWS log group region used for development deployments. Be sure this matches the awslogs-region option for the awslogs driver
+// in the associated Docker Compose file.
+env.AWS_ECS_DEV_LOG_GROUP_REGION = "us-east-1"
+
+// <----------------------- </Dev> ----------------------->
+
+// <----------------------- <Prod> ----------------------->
+
+// Docker Compose file used for production deployments. All the relevant details on the image will be here. If using this with
+// AWS ECS, be sure to change the Docker Compose version specifier to 2 instead of 3.
+env.DOCKER_COMPOSE_PROD_FILE_NAME_AND_LOCATION = "docker-compose-prod.yml"
+
+// Number of production Docker containers that should be running for this service on the Amazon ECS cluster.
+// Be sure there is at least the same amount of VMs available in the cluster or deployment failures will occur.
+env.AWS_ECS_PROD_INSTANCE_COUNT = 3
+
+// The percentage of containers that must remain running when updating a production Amazon ECS service. Default is 50.
+// This value is ignored if the desired instance count is 1 (see below).
+// See http://docs.aws.amazon.com/AmazonECS/latest/developerguide/service_definition_parameters.html#minimumHealthyPercent for
+// more details.
+env.AWS_ECS_PROD_DEPLOYMENT_MIN_HEALTHY_PERCENT = 50
+
+// The maximum percentage of containers that must remain running when updating a production Amazon ECS service. Default is 200.
+// See http://docs.aws.amazon.com/AmazonECS/latest/developerguide/service_definition_parameters.html#maximumPercent for
+// more details.
+env.AWS_ECS_PROD_DEPLOYMENT_MAX_PERCENT = 200
+
+// The AWS log group name used for production deployments. Be sure this matches the awslogs-group option for the awslogs driver
+// in the associated Docker Compose file. See http://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_awslogs.html#create_awslogs_loggroups
+// for more details.
+env.AWS_ECS_PROD_LOG_GROUP_NAME = "${env.DOCKER_SERVICE_NAME}-prod"
+
+// The AWS log group region used for production deployments. Be sure this matches the awslogs-region option for the awslogs driver
+// in the associated Docker Compose file.
+env.AWS_ECS_PROD_LOG_GROUP_REGION = "us-east-1"
+
+// <----------------------- </Prod> ---------------------->
+
+// <----------------------- <Git Data> ----------------------->
+env.GIT_UPSTREAM_REPO_URL = "https://gitlab-spacely-engineering.example.com:51443/cicd-demos/spring-boot.git"
+
+// only set full URL if GitLab action exists, otherwise env.gitlabSourceNamespace won't exist
+if (env.gitlabActionType == null) {
+  env.GIT_FORKED_REPO_URL = ""
+} else {
+  // This is the forked upstream repository URL. It is important to follow the below format or merge request processing may fail.
+  // Do not remove the ${gitlabSourceNamespace} environment variable. It will fill in important information at runtime.
+  env.GIT_FORKED_REPO_URL = "https://gitlab-spacely-engineering.example.com:51443/${gitlabSourceNamespace}/spring-boot.git"
+}
+
+env.GIT_DEV_BRANCH_NAME = "develop"                             // Name of the development branch where all work is pushed.
+                                                                // Following this approach prevents working directly out of
+                                                                // the master branch which is a bad practice. The work that is
+                                                                // pushed to the development branch happens through merge
+                                                                // requests. See below for the logic that handles events
+                                                                // for the development branch.
+
+env.GIT_MASTER_BRANCH_NAME = "master"                           // The name of the master branch. No work should ever occur
+                                                                // directly in the branch. However, when a release is ready
+                                                                // the data from the development branch can be pulled into
+                                                                // the master branch, a release created and tagged, etc.
+                                                                // When this occurs a job will run. See below for the logic
+                                                                // that handles events for the master branch.
+
+env.GIT_CREDENTIALS_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" // Credentials for accessing the repository to perform
+                                                                // Git operations (e.g. pull, push, etc.). These credentials
+                                                                // are created in Jenkins and the resulting ID obtained and
+                                                                // placed here.
+
+env.CICD_ADMIN_NAME = "CICD Admin"                              // Name and email address used by Git to perform operations.
+env.CICD_ADMIN_EMAIL = "admin@example.com"
+// <----------------------- </Git Data> ----------------------->
+
+// --------------------------------------------------------------------------------------------------------------------------
+// </Environment Variables>
+
+// <Functions>
+// --------------------------------------------------------------------------------------------------------------------------
+
+// Prints important environment information depending upon the context of the event (e.g. push, merge, forced build, etc.).
+def printEnvDetails() {
+  // only print environment details if a GitLab action is defined
+  if (env.gitlabActionType != null) {
+    echo "-----------------------------------------------------"
+    echo "GitLab Branch: ${gitlabBranch}"
+    echo "GitLab Source Branch: ${gitlabSourceBranch}"
+    echo "GitLab Action Type: ${gitlabActionType}"
+    echo "GitLab Username: ${gitlabUserName}"
+    echo "GitLab User Email: ${gitlabUserEmail}"
+    echo "GitLab Source Repo Homepage: ${gitlabSourceRepoHomepage}"
+    echo "GitLab Source Repo Name: ${gitlabSourceRepoName}"
+    echo "GitLab Source Namespace: ${gitlabSourceNamespace}"
+    echo "GitLab Source Repo URL: ${gitlabSourceRepoURL}"
+    echo "GitLab Source Repo SSH URL: ${gitlabSourceRepoSshUrl}"
+    echo "GitLab Source Repo HTTP URL: ${gitlabSourceRepoHttpUrl}"
+
+    // only print these variables when a merge action occurs - this prevents a groovy.lang.MissingPropertyException
+    if (env.gitlabActionType == "MERGE") {
+      echo "GitLab Merge Request Title: ${gitlabMergeRequestTitle}"
+      echo "GitLab Merge Request ID: ${gitlabMergeRequestId}"
+      echo "GitLab Merge Request State: ${env.gitlabMergeRequestState}"
+      echo "GitLab Merge Request Last Commit: ${gitlabMergeRequestLastCommit}"
+      echo "GitLab Merge Request Target Project ID: ${gitlabMergeRequestTargetProjectId}"
+      echo "GitLab Target Branch: ${gitlabTargetBranch}"
+      echo "GitLab Target Repo Name: ${gitlabTargetRepoName}"
+      echo "GitLab Target Namespace: ${gitlabTargetNamespace}"
+      echo "GitLab Target Repo SSH URL: ${gitlabTargetRepoSshUrl}"
+      echo "GitLab Target Repo HTTP URL: ${gitlabTargetRepoHttpUrl}"
+    }
+
+    echo "-----------------------------------------------------"
+  }
+}
+
+// Gets the instance count of the AWS ECS container associated with the service
+def int getEcsServiceContainerCount() {
+  int containerInstanceCount = sh(script: "ecs-cli ps | grep -F '${env.DOCKER_SERVICE_NAME}' | grep -Fc 'RUNNING' || true", returnStdout: true).trim()
+  echo "Current running container count for ${env.DOCKER_SERVICE_NAME} on Amazon ECS cluster: " + containerInstanceCount
+  return containerInstanceCount
+}
+
+// Deploys the built Docker image as an AWS ECS service
+def deployEcsService(String currentBranch) {
+  if (currentBranch == null || currentBranch == "") {
+    throw new Exception("In order to properly deploy the Amazon ECS service, please provide a valid Git branch name.") as java.lang.Throwable
+  } else {
+    // ensure the branch passed is valid for service deployment
+    if (!currentBranch.equals(env.GIT_DEV_BRANCH_NAME) && !currentBranch.equals(env.GIT_MASTER_BRANCH_NAME)) {
+      throw new Exception("Branch specified for Amazon ECS service deployment is not the master or development branch.") as java.lang.Throwable
+    } else {
+      String dockerComposeLocationAndFileName = (currentBranch == env.GIT_DEV_BRANCH_NAME) ? env.DOCKER_COMPOSE_DEV_FILE_NAME_AND_LOCATION : env.DOCKER_COMPOSE_PROD_FILE_NAME_AND_LOCATION
+      String logGroupName = (currentBranch == env.GIT_DEV_BRANCH_NAME) ? env.AWS_ECS_DEV_LOG_GROUP_NAME : env.AWS_ECS_PROD_LOG_GROUP_NAME
+      String logGroupRegion = (currentBranch == env.GIT_DEV_BRANCH_NAME) ? env.AWS_ECS_DEV_LOG_GROUP_REGION : env.AWS_ECS_PROD_LOG_GROUP_REGION
+      int minimumHealthyPercent = (currentBranch == env.GIT_DEV_BRANCH_NAME) ? env.AWS_ECS_DEV_DEPLOYMENT_MIN_HEALTHY_PERCENT : env.AWS_ECS_PROD_DEPLOYMENT_MIN_HEALTHY_PERCENT
+      int maximumPercent = (currentBranch == env.GIT_DEV_BRANCH_NAME) ? env.AWS_ECS_DEV_DEPLOYMENT_MAX_PERCENT : env.AWS_ECS_PROD_DEPLOYMENT_MAX_PERCENT
+
+      // get the running container count
+      int containerInstanceCount = getEcsServiceContainerCount()
+
+      // if zero or one containers are running for the service then deploy it with proper min health percent so future deployments are successful
+      if (containerInstanceCount <= 1) {
+        // create the log group before performing the initial deployment
+        sh "aws logs create-log-group --log-group-name ${logGroupName} --region ${logGroupRegion} || true"
+
+        // perform the initial deployment
+        sh "ecs-cli compose --file ${dockerComposeLocationAndFileName} --project-name ${env.DOCKER_SERVICE_NAME} service up --deployment-min-healthy-percent 0"
+      }
+      // otherwise if there is more than one container (initial deployment already performed) running for the service then deploy it with desired min health percent
+      else if (containerInstanceCount > 1) {
+        sh "ecs-cli compose --file ${dockerComposeLocationAndFileName} --project-name ${env.DOCKER_SERVICE_NAME} service up --deployment-min-healthy-percent ${minimumHealthyPercent} --deployment-max-percent ${maximumPercent}"
+      }
+    }
+  }
+}
+
+// Scales the deployed AWS ECS service
+def scaleEcsService(String currentBranch) {
+  if (currentBranch == null || currentBranch == "") {
+    throw new Exception("In order to properly scale the Amazon ECS service, please provide a valid Git branch name.") as java.lang.Throwable
+  } else {
+    // ensure the branch passed is valid for service scaling
+    if (!currentBranch.equals(env.GIT_DEV_BRANCH_NAME) && !currentBranch.equals(env.GIT_MASTER_BRANCH_NAME)) {
+      throw new Exception("Branch specified for Amazon ECS service scaling is not the master or development branch.") as java.lang.Throwable
+    } else {
+      String dockerComposeLocationAndFileName = (currentBranch == env.GIT_DEV_BRANCH_NAME) ? env.DOCKER_COMPOSE_DEV_FILE_NAME_AND_LOCATION : env.DOCKER_COMPOSE_PROD_FILE_NAME_AND_LOCATION
+      int minimumHealthyPercent = (currentBranch == env.GIT_DEV_BRANCH_NAME) ? env.AWS_ECS_DEV_DEPLOYMENT_MIN_HEALTHY_PERCENT : env.AWS_ECS_PROD_DEPLOYMENT_MIN_HEALTHY_PERCENT
+      int maximumPercent = (currentBranch == env.GIT_DEV_BRANCH_NAME) ? env.AWS_ECS_DEV_DEPLOYMENT_MAX_PERCENT : env.AWS_ECS_PROD_DEPLOYMENT_MAX_PERCENT
+
+      // get the running and desired container count and scale if necessary
+      int containerInstanceCount = getEcsServiceContainerCount()
+      int desiredContainerInstanceCount = (currentBranch == env.GIT_DEV_BRANCH_NAME) ? env.AWS_ECS_DEV_INSTANCE_COUNT.toInteger() : env.AWS_ECS_PROD_INSTANCE_COUNT.toInteger()
+
+      // throw an error if no containers are running (this function shouldn't have been called)
+      if (containerInstanceCount == 0) {
+        throw new Exception("Unable to scale the Amazon ECS service since no containers are running. Be sure to deploy first.") as java.lang.Throwable
+      }
+      // otherwise if there is at least one container running then scale the service
+      else if (containerInstanceCount > 0 && containerInstanceCount < desiredContainerInstanceCount) {
+        echo "Scaling ${env.DOCKER_SERVICE_NAME} to run ${desiredContainerInstanceCount} containers..."
+        sh "ecs-cli compose --file ${dockerComposeLocationAndFileName} --project-name ${env.DOCKER_SERVICE_NAME} service scale --deployment-min-healthy-percent ${minimumHealthyPercent} --deployment-max-percent ${maximumPercent} ${desiredContainerInstanceCount}"
+      }
+      // otherwise if the container instance count matches the desired container instance count, do nothing
+      else if (containerInstanceCount == desiredContainerInstanceCount) {
+        echo "Skipping container instance scaling since the current container count matches the desired amount."
+      }
+    }
+  }
+}
+// --------------------------------------------------------------------------------------------------------------------------
+// </Functions>
+
+// <Stages, Steps, Etc.>
+// --------------------------------------------------------------------------------------------------------------------------
+
+// The master node (Jenkins Master) will be used to perform health checks and load balancing logic. It will loop through the
+// map of nodes (servers used to process jobs) and check their exposed Hello World service running on port 80. If a response
+// code of 200 is received, the server is considered to be available. Otherwise, it is determined to be down. Based on the
+// created list of online servers, one will be chosen at random to run the ephemeral Jenkins Slave container to perform the
+// job.
+//
+// The reason this logic must happen in the master node is because it cannot run on a node that may not be online. This logic
+// is very lightweight and will not stress the master node.
+node('master') {
+  stage("get-node") {
+    String statusCode = ""
+    List onlineNodes = []
+
+    // loop through each node and determine which is online.
+    nodeMap.each {
+      statusCode = sh(script: "curl --connect-timeout 5 -LI http://${it.value} -o /dev/null -w '%{http_code}\n' -s || true",
+        returnStdout: true).trim()
+
+      // if the node is online, add it to the list
+      if (statusCode == "200") {
+        onlineNodes.add(it.key)
+      } else {
+        echo "${it.key} is currently offline and unable to process jobs."
+      }
+    }
+
+    // if no available nodes are online, throw an error
+    if (onlineNodes.size() == 0) {
+      throw new Exception("No available nodes are online to process Jenkins jobs.") as java.lang.Throwable
+    }
+    // otherwise randomly choose an online node and use that to run the job (logic below)
+    else {
+      echo "${onlineNodes.size()} node(s) online and available to process Jenkins jobs."
+      int chosenNodeIndex = new Random().nextInt(onlineNodes.size())
+      String randomOnlineNode = onlineNodes.get(chosenNodeIndex)
+      chosenNode = randomOnlineNode
+      echo "Using ${randomOnlineNode} to process the Jenkins job. Please wait while container is created."
+      echo "Please disregard any \"Jenkins doesn’t have label\" messages."
+    }
+  }
+}
+
+// Use the chosen node to perform the job.
+node (chosenNode) {
+  try {
+    // ensure timestamps appear in the logs
+    timestamps {
+      // wrap all stages with logic which will properly inform GitLab about what is going on
+      gitlabBuilds(builds: ["print-info", "checkout", "lint", "build", "test", "push", "deploy", "cleanup"]) {
+        stage("print-info") {
+          // wrap logic for this specific stage to keep GitLab informed
+          gitlabCommitStatus("print-info") {
+            printEnvDetails()
+          }
+        }
+
+        stage("checkout") {
+          // wrap logic for this specific stage to keep GitLab informed
+          gitlabCommitStatus("checkout") {
+            // if GitLab merge action occurs
+            if (env.gitlabActionType == "MERGE") {
+              // checkout forked source branch and then merge with upstream target branch
+              echo "Checking out upstream branch and merging with forked source branch..."
+              checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: 'merge-requests/${gitlabMergeRequestIid}']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'UserIdentity', email: env.CICD_ADMIN_EMAIL, name: env.CICD_ADMIN_NAME], [$class: 'PreBuildMerge', options: [fastForwardMode: 'FF', mergeRemote: 'origin', mergeStrategy: 'default', mergeTarget: '${gitlabTargetBranch}']]], submoduleCfg: [], userRemoteConfigs: [[credentialsId: env.GIT_CREDENTIALS_ID, name: 'origin', refspec: '+refs/heads/*:refs/remotes/origin/* +refs/merge-requests/*/head:refs/remotes/origin/merge-requests/*', url: env.GIT_UPSTREAM_REPO_URL], [credentialsId: env.GIT_CREDENTIALS_ID, name: '${gitlabSourceRepoName}', url: env.GIT_FORKED_REPO_URL]]]
+            }
+            // otherwise if GitLab action type is null, Jenkins triggered the job manually outside of GitLab, or if GitLab push action occurs
+            else if (env.gitlabActionType == null || env.gitlabActionType == "PUSH") {
+              // if the branch is null, Jenkins triggered the build manually, or if action is for the GitLab development branch
+              if (env.gitlabBranch == null || env.gitlabBranch == env.GIT_DEV_BRANCH_NAME) {
+                // checkout upstream development branch only
+                echo "Checking out upstream development branch..."
+                checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: '*/develop']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'UserIdentity', email: env.CICD_ADMIN_EMAIL, name: env.CICD_ADMIN_NAME]], submoduleCfg: [], userRemoteConfigs: [[credentialsId: env.GIT_CREDENTIALS_ID, url: env.GIT_UPSTREAM_REPO_URL]]]
+              }
+              // otherwise if action is for the GitLab master branch
+              else if (env.gitlabBranch == env.GIT_MASTER_BRANCH_NAME) {
+                // checkout upstream master branch only
+                echo "Checking out upstream master branch..."
+                //checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'UserIdentity', email: env.CICD_ADMIN_EMAIL, name: env.CICD_ADMIN_NAME]], submoduleCfg: [], userRemoteConfigs: [[credentialsId: env.GIT_CREDENTIALS_ID, url: env.GIT_UPSTREAM_REPO_URL]]]
+              } else {
+                echo "Skipping checkout since there are no steps defined for the ${env.gitlabBranch} branch."
+              }
+            } else {
+              echo "Skipping checkout since the GitLab action has no steps defined."
+            }
+          }
+        }
+
+        stage("lint") {
+          // wrap logic for this specific stage to keep GitLab informed
+          gitlabCommitStatus("lint") {
+            // if GitLab merge action occurs
+            if (env.gitlabActionType == "MERGE") {
+              // TODO: insert linting logic
+            } else {
+              echo "Skipping linting since the GitLab action has no steps defined."
+            }
+          }
+        }
+
+        stage("build") {
+          // wrap logic for this specific stage to keep GitLab informed
+          gitlabCommitStatus("build") {
+            // if GitLab action type or target branch is null, Jenkins triggered the job manually outside
+            // of GitLab or if GitLab push action occurs
+            if (env.gitlabActionType == null || env.gitlabActionType == "PUSH") {
+              // perform appropriate action based on target branch
+              if (env.gitlabTargetBranch == null || env.gitlabTargetBranch == env.GIT_DEV_BRANCH_NAME) {
+                echo "Building Docker deployment image since manual build or push event occurred..."
+                sh "docker-compose -f ${DOCKER_COMPOSE_DEV_FILE_NAME_AND_LOCATION} build ${DOCKER_SERVICE_NAME}"
+              } else if (env.gitlabTargetBranch == env.GIT_MASTER_BRANCH_NAME) {
+                echo "Building Docker deployment image since push event occurred..."
+                sh "docker-compose -f ${DOCKER_COMPOSE_PROD_FILE_NAME_AND_LOCATION} build ${DOCKER_SERVICE_NAME}"
+              } else {
+                echo "Skipping build since there are no steps defined for the ${env.gitlabBranch} branch."
+              }
+            }
+            // if GitLab merge action occurs
+            else if (env.gitlabActionType == "MERGE") {
+              // perform appropriate action based on target branch
+              if (env.gitlabTargetBranch == env.GIT_DEV_BRANCH_NAME || env.gitlabTargetBranch == env.GIT_MASTER_BRANCH_NAME) {
+                echo "Building Docker CICD image from merge request..."
+                sh "docker-compose -f ${DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION} build ${DOCKER_SERVICE_NAME}"
+              } else {
+                echo "Skipping build since there are no steps defined for the ${env.gitlabBranch} branch."
+              }
+            } else {
+              echo "Skipping build since the GitLab action has no steps defined."
+            }
+          }
+        }
+
+        stage("test") {
+          // wrap logic for this specific stage to keep GitLab informed
+          gitlabCommitStatus("test") {
+            // if GitLab merge action occurs
+            if (env.gitlabActionType == "MERGE") {
+              // perform appropriate action based on target branch
+              if (env.gitlabTargetBranch == env.GIT_DEV_BRANCH_NAME || env.gitlabTargetBranch == env.GIT_MASTER_BRANCH_NAME) {
+                echo "Running tests within built Docker image..."
+                sh "docker-compose -f ${DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION} run --rm ${DOCKER_SERVICE_NAME} mvn test"
+              } else {
+                echo "Skipping tests since there are no steps defined for the ${env.gitlabBranch} branch."
+              }
+            } else {
+              echo "Skipping tests since the GitLab action has no steps defined."
+            }
+          }
+        }
+
+        stage("push") {
+          // wrap logic for this specific stage to keep GitLab informed
+          gitlabCommitStatus("push") {
+            // if GitLab action type or target branch is null, Jenkins triggered the job manually outside
+            // of GitLab or if GitLab push action occurs
+            if (env.gitlabActionType == null || env.gitlabActionType == "PUSH") {
+              // perform appropriate action based on target branch
+              if (env.gitlabTargetBranch == null || env.gitlabTargetBranch == env.GIT_DEV_BRANCH_NAME) {
+                echo "Pushing Maven snapshot artifacts..."
+                sh "docker-compose -f ${DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION} build ${DOCKER_SERVICE_NAME} > /dev/null 2>&1"
+                sh "docker-compose -f ${DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION} run --rm ${DOCKER_SERVICE_NAME} mvn deploy -DskipTests"
+
+                echo "Pushing built Docker deployment image to private Docker Image Registry..."
+                sh "aws ecr get-login --no-include-email --region us-east-1 | sh"
+                sh "docker-compose -f ${DOCKER_COMPOSE_DEV_FILE_NAME_AND_LOCATION} push ${DOCKER_SERVICE_NAME}"
+              } else if (env.gitlabTargetBranch == env.GIT_MASTER_BRANCH_NAME) {
+                echo "Pushing Maven snapshot artifacts..."
+                sh "docker-compose -f ${DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION} build ${DOCKER_SERVICE_NAME} > /dev/null 2>&1"
+                sh "docker-compose -f ${DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION} run --rm ${DOCKER_SERVICE_NAME} mvn deploy -DskipTests"
+
+                echo "Pushing built Docker deployment image to private Docker Image Registry..."
+                sh "aws ecr get-login --no-include-email --region us-east-1 | sh"
+                sh "docker-compose -f ${DOCKER_COMPOSE_PROD_FILE_NAME_AND_LOCATION} push ${DOCKER_SERVICE_NAME}"
+              } else {
+                echo "Skipping push since there are no steps defined for the ${env.gitlabBranch} branch."
+              }
+            } else {
+              echo "Skipping push since the GitLab action has no steps defined."
+            }
+          }
+        }
+
+        stage("deploy") {
+          // wrap logic for this specific stage to keep GitLab informed
+          gitlabCommitStatus("deploy") {
+            // if GitLab action type or target branch is null, Jenkins triggered the job manually outside
+            // of GitLab or if GitLab push action occurs
+            if (env.gitlabActionType == null || env.gitlabActionType == "PUSH") {
+              // perform appropriate action based on target branch
+              if (env.gitlabTargetBranch == null || env.gitlabTargetBranch == env.GIT_DEV_BRANCH_NAME) {
+                echo "Deploying built Docker deployment image to development environment as a service..."
+                // deploy the Amazon ECS service
+                deployEcsService(env.GIT_DEV_BRANCH_NAME)
+
+                // scale the Amazon ECS service if needed
+                scaleEcsService(env.GIT_DEV_BRANCH_NAME)
+              } else if (env.gitlabTargetBranch == env.GIT_MASTER_BRANCH_NAME) {
+                echo "Deploying built Docker deployment image to production environment as a service..."
+                // deploy the Amazon ECS service
+                deployEcsService(env.GIT_MASTER_BRANCH_NAME)
+
+                // scale the Amazon ECS service if needed
+                scaleEcsService(env.GIT_MASTER_BRANCH_NAME)
+              } else {
+                echo "Skipping deployment since there are no steps defined for the ${env.gitlabBranch} branch."
+              }
+            } else {
+              echo "Skipping deployment since the GitLab action has no steps defined."
+            }
+          }
+        }
+
+        stage("cleanup") {
+          // wrap logic for this specific stage to keep GitLab informed
+          gitlabCommitStatus("cleanup") {
+            // clean up left over artifacts from previous builds
+            echo "Cleaning up dangling Docker images and volumes..."
+            sh "docker image prune --force && docker volume prune --force"
+          }
+        }
+      }
+    }
+  }
+  // catch any errors which may occur to allow for proper debugging
+  catch (Exception exception) {
+    echo "Something unexpected happened. Please inspect the Jenkins logs."
+
+    // notify GitLab that job failed
+    updateGitlabCommitStatus name: 'build', state: 'failed'
+
+    // add comment to GitLab merge request
+    addGitLabMRComment(comment: "Something unexpected happened. Please inspect the Jenkins logs.")
+
+    // re-throw the exception
+    throw exception as java.lang.Throwable
+  }
+}
+// --------------------------------------------------------------------------------------------------------------------------
+// </Stages, Steps, Etc.>
