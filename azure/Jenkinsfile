@@ -28,25 +28,33 @@ chosenNode = ""                                                 // Variable whic
 // variables to get things done.
 // --------------------------------------------------------------------------------------------------------------------------
 
-// Private Docker Registry FQDN used for logins, pulls, pushes, etc.
+// Private Docker Registry FQDN used for logins, pulls, pushes, etc. Be sure to omit https as it will be implicitly added.
 env.PRIVATE_DOCKER_REGISTRY_FQDN = "your-private-registry.example.com"
 
 // Private Docker Registry credentials ID which translate to the username and password used to authenticate with the registry.
 // These credentials are created in Jenkins and the resulting ID obtained and placed here.
 env.PRIVATE_DOCKER_REGISTRY_CREDENTIALS_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
-// Docker Compose file used for production builds, pushes, and deployments. All the relevent details on the image will be here.
-env.DOCKER_COMPOSE_PROD_FILE_NAME = "docker-compose-prod.yml"
+// Docker Compose file used only by CICD for builds, tests, artifact deployments, etc. but not image deployments. All the
+// relevant details on the image will be here.
+env.DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION = "docker-compose-cicd.yml"
 
-// Docker Compose file used for development builds, pushes, and deployments. All the relevent details on the image will be here.
-env.DOCKER_COMPOSE_DEV_FILE_NAME = "docker-compose-dev.yml"
+// Name of service defined in Docker Compose files (e.g. spring-boot-demo). Ensure this is very explicit and unique.
+env.DOCKER_SERVICE_NAME = "spring-boot-demo"
 
-// The name of the service defined in each Docker Compose file (should be the same). This is used when running commands.
-env.DOCKER_COMPOSE_SERVICE_NAME = "spring-boot-demo"
+// <----------------------- <Dev> ------------------------>
 
-// The name of the test runner Container. When the newly built image is invoked, it will use this name while it runs so that if
-// others are monitoring the environment they will understand it is a temporary test runner for the project.
-env.DOCKER_TEST_RUNNER_CONTAINER_NAME = "Spring-Boot-Demo-Test-Runner"
+// Docker Compose file used for development deployments. All the relevant details on the image will be here.
+env.DOCKER_COMPOSE_DEV_FILE_NAME_AND_LOCATION = "docker-compose-dev.yml"
+
+// <----------------------- </Dev> ----------------------->
+
+// <----------------------- <Prod> ----------------------->
+
+// Docker Compose file used for production deployments. All the relevant details on the image will be here.
+env.DOCKER_COMPOSE_PROD_FILE_NAME_AND_LOCATION = "docker-compose-prod.yml"
+
+// <----------------------- </Prod> ---------------------->
 
 // <----------------------- <Git Data> ----------------------->
 env.GIT_UPSTREAM_REPO_URL = "https://gitlab-spacely-engineering.example.com:51443/cicd-demos/spring-boot.git"
@@ -134,7 +142,7 @@ def printEnvDetails() {
 // code of 200 is received, the server is considered to be available. Otherwise, it is determined to be down. Based on the
 // created list of online servers, one will be chosen at random to run the ephemeral Jenkins Slave container to perform the
 // job.
-
+//
 // The reason this logic must happen in the master node is because it cannot run on a node that may not be online. This logic
 // is very lightweight and will not stress the master node.
 node('master') {
@@ -158,7 +166,7 @@ node('master') {
     // if no available nodes are online, throw an error
     if (onlineNodes.size() == 0) {
       throw new Exception("No available nodes are online to process Jenkins jobs.") as java.lang.Throwable
-    } 
+    }
     // otherwise randomly choose an online node and use that to run the job (logic below)
     else {
       echo "${onlineNodes.size()} node(s) online and available to process Jenkins jobs."
@@ -206,7 +214,7 @@ node (chosenNode) {
               else if (env.gitlabBranch == env.GIT_MASTER_BRANCH_NAME) {
                 // checkout upstream master branch only
                 echo "Checking out upstream master branch..."
-                checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'UserIdentity', email: env.CICD_ADMIN_EMAIL, name: env.CICD_ADMIN_NAME]], submoduleCfg: [], userRemoteConfigs: [[credentialsId: env.GIT_CREDENTIALS_ID, url: env.GIT_UPSTREAM_REPO_URL]]]
+                //checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'UserIdentity', email: env.CICD_ADMIN_EMAIL, name: env.CICD_ADMIN_NAME]], submoduleCfg: [], userRemoteConfigs: [[credentialsId: env.GIT_CREDENTIALS_ID, url: env.GIT_UPSTREAM_REPO_URL]]]
               } else {
                 echo "Skipping checkout since there are no steps defined for the ${env.gitlabBranch} branch."
               }
@@ -219,8 +227,8 @@ node (chosenNode) {
         stage("lint") {
           // wrap logic for this specific stage to keep GitLab informed
           gitlabCommitStatus("lint") {
-            // if GitLab action type is null, Jenkins triggered the job manually outside of GitLab, or if GitLab merge action occurs
-            if (env.gitlabActionType == null || env.gitlabActionType == "MERGE") {
+            // if GitLab merge action occurs
+            if (env.gitlabActionType == "MERGE") {
               // TODO: insert linting logic
             } else {
               echo "Skipping linting since the GitLab action has no steps defined."
@@ -231,17 +239,26 @@ node (chosenNode) {
         stage("build") {
           // wrap logic for this specific stage to keep GitLab informed
           gitlabCommitStatus("build") {
-            if (env.gitlabActionType == null || env.gitlabActionType == "MERGE" || env.gitlabActionType == "PUSH") {
-              // if GitLab target branch is null, Jenkins triggered the job manually outside of GitLab
-              // or if GitLab merge or push action occurs and is directed at the upstream development branch
+            // if GitLab action type or target branch is null, Jenkins triggered the job manually outside
+            // of GitLab or if GitLab push action occurs
+            if (env.gitlabActionType == null || env.gitlabActionType == "PUSH") {
+              // perform appropriate action based on target branch
               if (env.gitlabTargetBranch == null || env.gitlabTargetBranch == env.GIT_DEV_BRANCH_NAME) {
-                echo "Building Docker image from merge request..."
-                sh "docker-compose -f ${DOCKER_COMPOSE_DEV_FILE_NAME} build ${DOCKER_COMPOSE_SERVICE_NAME}"
+                echo "Building Docker deployment image since manual build or push event occurred..."
+                sh "docker-compose -f ${DOCKER_COMPOSE_DEV_FILE_NAME_AND_LOCATION} build ${DOCKER_SERVICE_NAME}"
+              } else if (env.gitlabTargetBranch == env.GIT_MASTER_BRANCH_NAME) {
+                echo "Building Docker deployment image since push event occurred..."
+                sh "docker-compose -f ${DOCKER_COMPOSE_PROD_FILE_NAME_AND_LOCATION} build ${DOCKER_SERVICE_NAME}"
+              } else {
+                echo "Skipping build since there are no steps defined for the ${env.gitlabBranch} branch."
               }
-              // otherwise if GitLab merge or push action occurs and is directed at the upstream master branch
-              else if (env.gitlabTargetBranch == env.GIT_MASTER_BRANCH_NAME) {
-                echo "Building Docker image from merge request..."
-                sh "docker-compose -f ${DOCKER_COMPOSE_PROD_FILE_NAME} build ${DOCKER_COMPOSE_SERVICE_NAME}"
+            }
+            // if GitLab merge action occurs
+            else if (env.gitlabActionType == "MERGE") {
+              // perform appropriate action based on target branch
+              if (env.gitlabTargetBranch == env.GIT_DEV_BRANCH_NAME || env.gitlabTargetBranch == env.GIT_MASTER_BRANCH_NAME) {
+                echo "Building Docker CICD image from merge request..."
+                sh "docker-compose -f ${DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION} build ${DOCKER_SERVICE_NAME}"
               } else {
                 echo "Skipping build since there are no steps defined for the ${env.gitlabBranch} branch."
               }
@@ -254,17 +271,14 @@ node (chosenNode) {
         stage("test") {
           // wrap logic for this specific stage to keep GitLab informed
           gitlabCommitStatus("test") {
-            if (env.gitlabActionType == null || env.gitlabActionType == "MERGE") {
-              // if GitLab target branch is null, Jenkins triggered the job manually outside of GitLab
-              // or if merge event occurs and is directed at the upstream development branch
-              if (env.gitlabTargetBranch == null || env.gitlabTargetBranch == env.GIT_DEV_BRANCH_NAME) {
+            // if GitLab merge action occurs
+            if (env.gitlabActionType == "MERGE") {
+              // perform appropriate action based on target branch
+              if (env.gitlabTargetBranch == env.GIT_DEV_BRANCH_NAME || env.gitlabTargetBranch == env.GIT_MASTER_BRANCH_NAME) {
                 echo "Running tests within built Docker image..."
-                sh "docker-compose -f ${DOCKER_COMPOSE_DEV_FILE_NAME} run --rm --name ${DOCKER_TEST_RUNNER_CONTAINER_NAME} ${DOCKER_COMPOSE_SERVICE_NAME} mvn test"
-              }
-              // otherwise if merge event occurs and is directed at the upstream master branch
-              else if (env.gitlabTargetBranch == env.GIT_MASTER_BRANCH_NAME) {
-                echo "Running tests within built Docker image..."
-                sh "docker-compose -f ${DOCKER_COMPOSE_PROD_FILE_NAME} run --rm --name ${DOCKER_TEST_RUNNER_CONTAINER_NAME} ${DOCKER_COMPOSE_SERVICE_NAME} mvn test"
+                sh "docker-compose -f ${DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION} run --rm ${DOCKER_SERVICE_NAME} mvn test"
+              } else {
+                echo "Skipping tests since there are no steps defined for the ${env.gitlabBranch} branch."
               }
             } else {
               echo "Skipping tests since the GitLab action has no steps defined."
@@ -277,20 +291,27 @@ node (chosenNode) {
           gitlabCommitStatus("push") {
             // this allows the Docker Private Registry credentials be used to login, push, or pull images
             withCredentials([usernamePassword(credentialsId: env.PRIVATE_DOCKER_REGISTRY_CREDENTIALS_ID,
-                    passwordVariable: 'PRIVATE_DOCKER_REGISTRY_PASSWORD', usernameVariable: 'PRIVATE_DOCKER_REGISTRY_USERNAME')]) {
+                passwordVariable: 'PRIVATE_DOCKER_REGISTRY_PASSWORD', usernameVariable: 'PRIVATE_DOCKER_REGISTRY_USERNAME')]) {
+              // if GitLab action type or target branch is null, Jenkins triggered the job manually outside
+              // of GitLab or if GitLab push action occurs
               if (env.gitlabActionType == null || env.gitlabActionType == "PUSH") {
-                // if GitLab target branch is null, Jenkins triggered the job manually outside of GitLab
-                // or if push event occurs and originates from the upstream development branch
+                // perform appropriate action based on target branch
                 if (env.gitlabTargetBranch == null || env.gitlabTargetBranch == env.GIT_DEV_BRANCH_NAME) {
-                  echo "Pushing built Docker image to private Docker Image Registry..."
+                  echo "Pushing Maven snapshot artifacts..."
+                  sh "docker-compose -f ${DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION} build ${DOCKER_SERVICE_NAME} > /dev/null 2>&1"
+                  sh "docker-compose -f ${DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION} run --rm ${DOCKER_SERVICE_NAME} mvn deploy -DskipTests"
+
+                  echo "Pushing built Docker deployment image to private Docker Image Registry..."
                   sh "docker login --username=${PRIVATE_DOCKER_REGISTRY_USERNAME} --password=${PRIVATE_DOCKER_REGISTRY_PASSWORD} https://${PRIVATE_DOCKER_REGISTRY_FQDN}"
-                  sh "docker-compose -f ${DOCKER_COMPOSE_DEV_FILE_NAME} push ${DOCKER_COMPOSE_SERVICE_NAME}"
-                }
-                // otherwise if push event occurs and originates from the upstream master branch
-                else if (env.gitlabBranch == env.GIT_MASTER_BRANCH_NAME) {
-                  echo "Pushing built Docker image to private Docker Image Registry..."
+                  sh "docker-compose -f ${DOCKER_COMPOSE_DEV_FILE_NAME_AND_LOCATION} push ${DOCKER_SERVICE_NAME}"
+                } else if (env.gitlabTargetBranch == env.GIT_MASTER_BRANCH_NAME) {
+                  echo "Pushing Maven snapshot artifacts..."
+                  sh "docker-compose -f ${DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION} build ${DOCKER_SERVICE_NAME} > /dev/null 2>&1"
+                  sh "docker-compose -f ${DOCKER_COMPOSE_CICD_FILE_NAME_AND_LOCATION} run --rm ${DOCKER_SERVICE_NAME} mvn deploy -DskipTests"
+
+                  echo "Pushing built Docker deployment image to private Docker Image Registry..."
                   sh "docker login --username=${PRIVATE_DOCKER_REGISTRY_USERNAME} --password=${PRIVATE_DOCKER_REGISTRY_PASSWORD} https://${PRIVATE_DOCKER_REGISTRY_FQDN}"
-                  sh "docker-compose -f ${DOCKER_COMPOSE_PROD_FILE_NAME} push ${DOCKER_COMPOSE_SERVICE_NAME}"
+                  sh "docker-compose -f ${DOCKER_COMPOSE_PROD_FILE_NAME_AND_LOCATION} push ${DOCKER_SERVICE_NAME}"
                 } else {
                   echo "Skipping push since there are no steps defined for the ${env.gitlabBranch} branch."
                 }
@@ -304,17 +325,18 @@ node (chosenNode) {
         stage("deploy") {
           // wrap logic for this specific stage to keep GitLab informed
           gitlabCommitStatus("deploy") {
+            // if GitLab action type or target branch is null, Jenkins triggered the job manually outside
+            // of GitLab or if GitLab push action occurs
             if (env.gitlabActionType == null || env.gitlabActionType == "PUSH") {
-              // if GitLab target branch is null, Jenkins triggered the job manually outside of GitLab
-              // or if push event occurs and originates from the upstream development branch
+              // perform appropriate action based on target branch
               if (env.gitlabTargetBranch == null || env.gitlabTargetBranch == env.GIT_DEV_BRANCH_NAME) {
-                echo "Deploying built Docker image to development environment..."
-                sh "docker-compose -f docker-compose-dev.yml up -d ${DOCKER_COMPOSE_SERVICE_NAME}"
-              }
-              // otherwise if push event occurs and originates from the upstream master branch
-              else if (env.gitlabBranch == env.GIT_MASTER_BRANCH_NAME) {
-                echo "Deploying built Docker image to production environment..."
-                sh "docker-compose -f ${DOCKER_COMPOSE_PROD_FILE_NAME} up -d ${DOCKER_COMPOSE_SERVICE_NAME}"
+                echo "Deploying built Docker deployment image to development environment as a service..."
+                // TODO: insert deployment logic
+              } else if (env.gitlabTargetBranch == env.GIT_MASTER_BRANCH_NAME) {
+                echo "Deploying built Docker deployment image to production environment as a service..."
+                // TODO: insert deployment logic
+              } else {
+                echo "Skipping deployment since there are no steps defined for the ${env.gitlabBranch} branch."
               }
             } else {
               echo "Skipping deployment since the GitLab action has no steps defined."
@@ -325,14 +347,14 @@ node (chosenNode) {
         stage("cleanup") {
           // wrap logic for this specific stage to keep GitLab informed
           gitlabCommitStatus("cleanup") {
-            // clean up left over artificats from previous builds
+            // clean up left over artifacts from previous builds
             echo "Cleaning up dangling Docker images and volumes..."
             sh "docker image prune --force && docker volume prune --force"
           }
         }
       }
     }
-  } 
+  }
   // catch any errors which may occur to allow for proper debugging
   catch (Exception exception) {
     echo "Something unexpected happened. Please inspect the Jenkins logs."
@@ -343,7 +365,7 @@ node (chosenNode) {
     // add comment to GitLab merge request
     addGitLabMRComment(comment: "Something unexpected happened. Please inspect the Jenkins logs.")
 
-    // rethrow the exception
+    // re-throw the exception
     throw exception as java.lang.Throwable
   }
 }
