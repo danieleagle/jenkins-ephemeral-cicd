@@ -1,3 +1,16 @@
+# v1.3.2
+
+- Removed deprecated maintainer syntax and replaced it with label.
+- Fixed improper indentation in Fluentd logging example.
+- Updated Jenkins image reference to latest version.
+- Updated NGINX image reference to latest version.
+- Changed Jenkins Slave image to use the latest Alpine JRE instead of the JDK.
+- Updated Jenkins plugin references to latest versions.
+- Refactored Jenkinsfile and cleaned up branching.
+- Modified Spring Boot demo to use multi-stage Dockerfile for deployments and explicit Dockerfile for non-deployments.
+- Added settings.xml file so built JAR will be pushed to private Nexus Maven repo and to enable local server caching.
+- Added Jenkinsfile with example logic for AWS ECS deployments.
+
 # v1.3.1
 
 - Added Jenkinsfile to Azure assets.
